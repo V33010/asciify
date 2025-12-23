@@ -1,4 +1,3 @@
-
 # =========================
 # Python
 # =========================
@@ -51,7 +50,6 @@ logs/
 
 # =========================
 # Media / Generated Output
-# (very important for your projects)
 # =========================
 *.mp3
 *.wav
@@ -97,7 +95,7 @@ desktop.ini
 *~
 
 # =========================
-# Neovim (you use this)
+# Neovim 
 # =========================
 .nvim/
 .netrwhist
@@ -114,7 +112,7 @@ shada.main
 .nfs*
 
 # =========================
-# Node (just in case)
+# Node 
 # =========================
 node_modules/
 npm-debug.log*
