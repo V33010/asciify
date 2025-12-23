@@ -1,9 +1,9 @@
-# Asciify
+# asciify
 
 ![Python Version](https://img.shields.io/badge/python-3.x-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Asciify** is a robust Command Line Interface (CLI) tool designed to convert images into ASCII art. It features a retro-style typewriter user interface, intelligent image resizing, and an integrated local web server for viewing results.
+**asciify** is a robust Command Line Interface (CLI) tool designed to convert images into ASCII art. It features a retro-style typewriter user interface, intelligent image resizing, and an integrated local web server for viewing results.
 
 Built with modularity in mind, it runs seamlessly on Linux, Windows, and WSL2 environments.
 
