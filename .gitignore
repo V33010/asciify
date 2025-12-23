@@ -35,11 +35,14 @@ wheelhouse/
 pip-wheel-metadata/
 
 # =========================
-# uv / Poetry / Pipenv
+# Lock Files (Standard Practice: Keep these!)
 # =========================
-uv.lock
-poetry.lock
-Pipfile.lock
+# Usually, you WANT to commit lock files to ensure
+# other users get the exact same library versions.
+# If you strictly don't want them, uncomment below:
+# uv.lock
+# poetry.lock
+# Pipfile.lock
 
 # =========================
 # Logs & Runtime Files
@@ -62,13 +65,21 @@ logs/
 *.jpg
 *.jpeg
 *.gif
-*.txt
-output/
-outputs/
-assets/output/
-assets/generated/
-assets/downloaded_*
 *.Identifier
+
+# --- CRITICAL FIX START ---
+# 1. Ignore actual output files, but NOT all .txt files
+# (This protects 'examples/sample.txt' or 'requirements.txt')
+assets/output/*.txt
+
+# 2. Ignore contents of these folders, but keep the folder itself
+# by allowing the .gitkeep file.
+assets/output/*
+!assets/output/.gitkeep
+
+assets/input/*
+!assets/input/.gitkeep
+# --- CRITICAL FIX END ---
 
 # =========================
 # Temporary / Retry Files
@@ -125,5 +136,3 @@ yarn-error.log*
 # =========================
 .cache/
 .cache/**
-.cache
-.cache-*
