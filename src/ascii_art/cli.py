@@ -9,7 +9,13 @@ from . import converter, image_loader, image_resize, server, ui, writer
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Convert images to ASCII art")
+    # add_help=False is required to free up the '-h' flag for height
+    parser = argparse.ArgumentParser(
+        description="Convert images to ASCII art", add_help=False
+    )
+
+    # Manually add help back, but only as --help (no -h)
+    parser.add_argument("--help", action="help", help="Show this help message and exit")
 
     parser.add_argument("-i", "--input", help="Path to input image")
     parser.add_argument("-o", "--output", help="Output filename (no extension)")
@@ -19,7 +25,10 @@ def parse_args():
         "--no-animate", action="store_true", help="Disable text animation"
     )
     parser.add_argument("-w", "--width", type=int, help="Target width")
+
+    # Now -h can be used for height without crashing
     parser.add_argument("-h", "--height", type=int, help="Target height")
+
     parser.add_argument("--ratio", type=float, help="Target aspect ratio")
 
     return parser.parse_args()
@@ -68,9 +77,6 @@ def process_workflow(args):
         target_w, target_h = image_resize.interactive_resize(img)
 
     # 5. Resize
-    # Confirm resize if interactive? Old code did.
-    # To streamline: if CLI args used, skip confirm. If interactive, show confirm.
-    # For now, we follow the "make it work" path.
     img_resized = image_resize.resize_image(img, target_w, target_h)
 
     if not args.no_preview and (args.width is None and args.height is None):
@@ -100,8 +106,6 @@ def process_workflow(args):
         return
 
     # 9. Server
-    # Only run server if we are in interactive mode OR explicitly valid?
-    # Old code ran server always.
     ui.clear_terminal()
     server.start_server_and_open_browser(output_path)
 
