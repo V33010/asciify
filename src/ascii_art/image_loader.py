@@ -7,21 +7,15 @@ from PIL import Image
 
 from .ui import cool_print
 
-# Define paths relative to the project root assuming running from root
+# Define paths relative to the project root
 INPUT_DIR = Path("assets/input")
 
 
 def list_and_select_image():
-    """
-    Lists files in assets/input sorted by date (descending).
-    Asks user to select one by index.
-    """
-    # Ensure directory exists
     if not INPUT_DIR.exists():
         cool_print(f"Error: Directory {INPUT_DIR} does not exist.\n")
         return None
 
-    # Get all files
     files = []
     for filepath in INPUT_DIR.iterdir():
         if filepath.is_file() and filepath.name != ".gitkeep":
@@ -31,7 +25,6 @@ def list_and_select_image():
         cool_print("No files found in assets/input/\n")
         return None
 
-    # Sort by modification time (descending)
     files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     cool_print("Available images (sorted by newest):\n")
@@ -53,16 +46,16 @@ def list_and_select_image():
 
 
 def load_image(path, preview=True):
-    """
-    Loads an image from a path and optionally shows it.
-    """
     try:
         img = Image.open(path)
         if preview:
             cool_print(f"Opening {path} for preview...\n")
-            img.show()
-            # No interactive confirmation here to keep CLI flow smooth,
-            # checks happen in main flow if needed.
+            try:
+                img.show()
+            except Exception:
+                cool_print(
+                    "Warning: Could not open image preview (WSL/Display issue).\n"
+                )
         return img
     except Exception as e:
         cool_print(f"Error loading image: {e}\n")

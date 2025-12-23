@@ -1,5 +1,6 @@
 # src/ascii_art/server.py
 import http.server
+import os
 import socketserver
 import threading
 import time
@@ -14,11 +15,10 @@ class TextFileHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def log_message(self, format, *args):
-        # Silence server logs
+        # Silence server logs to keep terminal clean
         pass
 
     def do_GET(self):
-        # We serve the specific file at root or /myfile
         if self.path == "/" or self.path == "/myfile":
             try:
                 with open(self.file_to_serve, "rb") as f:
@@ -30,32 +30,42 @@ class TextFileHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_error(404, f"File not found: {e}")
         else:
-            # Fallback
             self.send_error(404, "Not Found")
 
 
 def start_server_and_open_browser(filepath):
     PORT = 8000
 
-    # Factory to pass the specific filepath to the handler
     def handler_factory(*args, **kwargs):
         return TextFileHandler(*args, file_to_serve=filepath, **kwargs)
 
     def run_server():
-        # allow_reuse_address prevents "Address already in use" errors on restart
+        # allow_reuse_address prevents "Address already in use" errors
         socketserver.TCPServer.allow_reuse_address = True
-        with socketserver.TCPServer(("", PORT), handler_factory) as httpd:
-            # We run loop logic outside, so we can't block forever if we want to exit cleanly
-            # But simpler logic: run as daemon
-            httpd.serve_forever()
+        # Check if port is available or catch error (simplified here)
+        try:
+            with socketserver.TCPServer(("", PORT), handler_factory) as httpd:
+                httpd.serve_forever()
+        except OSError as e:
+            print(f"Warning: Could not start server on port {PORT}: {e}")
 
-    # Start server thread
+    # Start server thread as daemon so it dies when main program exits
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
 
-    # Open browser
-    time.sleep(1)  # Wait for server to bind
-    url = f"http://localhost:{PORT}/myfile"
-    webbrowser.open(url)
+    # Give server a moment to spin up
+    time.sleep(1)
 
-    cool_print(f"Preview opened in browser at {url}\n")
+    url = f"http://localhost:{PORT}/myfile"
+
+    # Print the link CLEARLY for WSL users
+    cool_print(f"Server started. Access your art at: {url}\n")
+
+    # Try to open browser, but don't crash if WSL Interop fails
+    try:
+        # Suppress stderr to hide "grep: ... WSLInterop" noise if possible
+        # but Python's webbrowser module might print directly to stderr.
+        webbrowser.open(url)
+    except Exception:
+        # If it fails, just ignore it since we printed the URL above
+        pass
