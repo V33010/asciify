@@ -83,6 +83,13 @@ def process_workflow(args):
             # without saving to file, simpler is often better.
             # However, to keep consistency with the 'Square' look:
             sys.stdout.write("".join([char + " " for char in row]) + "\n")
+            # sys.stdout.write(
+            #     "".join([char + "" for char in row]) + "\n"
+            # )  # test without space
+            # sys.stdout.write(
+            #     "".join([char + char for char in row]) + "\n"
+            # )  # test 2 characters
+            # sys.stdout.write("".join([char + "ˑ" for char in row]) + "\n")  # test .
 
         return  # Exit workflow immediately
 
