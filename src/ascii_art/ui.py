@@ -3,27 +3,31 @@ import os
 import sys
 import time
 
-# Global configuration for animation
 CONFIG = {"animate": True}
 
 
 def cool_print(string):
-    """
-    Prints string with a typewriter effect if animation is enabled.
-    """
     if CONFIG["animate"]:
         for char in string:
             print(char, end="", flush=True)
-            time.sleep(0.01)  # Slightly faster than old code for better UX
+            time.sleep(0.01)
     else:
         print(string, end="", flush=True)
 
 
 def clear_terminal():
     """
-    Clears the terminal screen.
+    Hard clear: Wipes the screen completely (Windows/Linux standard).
     """
     os.system("cls" if os.name == "nt" else "clear")
+
+
+def soft_clear():
+    """
+    Soft clear: Moves cursor to top-left and clears everything below it.
+    This preserves the scrollback history so users can scroll up.
+    """
+    print("\033[H\033[J", end="")
 
 
 def print_header():
