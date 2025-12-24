@@ -1,6 +1,6 @@
 # src/ascii_art/charset.py
 
-DEFAULT_CHARSET = " .:,;|!)]>#$@%"
+DEFAULT_CHARSET = " .:;!|)]>#$@%"
 SIMPLE_CHARSET = " .:-=+*#%@"
 BLOCKS_CHARSET = " ░▒▓█"
 BLOCKS_EXTNEDED_CHARSET = " ░░▒▒▓▓██"
