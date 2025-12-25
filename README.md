@@ -1,97 +1,131 @@
-# asciify
+# Asciify Term
 
-![Python Version](https://img.shields.io/badge/python-3.x-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![PyPI - Version](https://img.shields.io/pypi/v/asciify-term?style=flat-square&color=blue)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/asciify-term?style=flat-square)
+![PyPI - License](https://img.shields.io/pypi/l/asciify-term?style=flat-square)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/asciify-term?style=flat-square)
 
-**asciify** is a robust Command Line Interface (CLI) tool designed to convert images into ASCII art. It features a retro-style typewriter user interface, intelligent image resizing, and an integrated local web server for viewing results.
+**Asciify Term** is a modern, cross-platform CLI utility that renders high-resolution images as ASCII art directly in your terminal.
 
-Built with modularity in mind, it runs seamlessly on Linux, Windows, and WSL2 environments.
+Originally built as a creative toy, it has evolved into a powerful **DevOps utility** for verifying image assets in headless environments (SSH, Docker, WSL) where GUI viewers are unavailable. It supports local files, remote URLs, and TrueColor rendering.
 
 ## 🚀 Features
 
-- **CLI Automation:** Full support for command-line arguments for batch processing or scripting.
-- **Smart Resizing:** Maintains aspect ratio automatically or allows custom dimensions.
-- **Visual Flair:** Optional "Cool Print" typewriter animation for terminal output.
-- **Custom Charsets:** Use the built-in density map or provide your own characters.
-- **Live Preview:** Instant browser preview of your generated art.
-- **WSL Support:** Optimized for Linux and Windows Subsystem for Linux (WSL2).
-- **Pure Python:** Built on top of Pillow and NumPy for efficiency.
+- **Terminal-First Workflow:** Instantly render images to stdout with zero configuration.
+- **Headless Support:** Perfect for verifying plot.png or asset files on remote servers via SSH.
+- **URL Support:** Fetch and render images directly from the web (http://...) without manual downloading.
+- **TrueColor Support:** Renders images in full 24-bit ANSI color.
+- **Smart Resizing:** Automatically fits the output to your current terminal window dimensions.
+- **Export Options:** Save outputs as plain text .txt or color-preserving .html.
+- **Legacy Interactive Mode:** A guided menu system for creative exploration.
 
 ## Installation
 
-### Prerequisites
+Install directly from PyPI:
 
-- Python 3.8+
-- pip
-
-### Setup
-
-1. Clone the repository:
 ```sh
-git clone https://github.com/yourusername/asciify.git
-cd asciify
+pip install asciify-term
 ```
 
-2. Install dependencies (Pillow, NumPy):
-```sh
-pip install .
-```
 
 ## Usage
 
-You can use the tool in two ways: Interactive Mode or CLI Mode.
+### 1. The Quick Scan (Default)
 
-### 1. Interactive Mode
+The primary use case is to quickly view an image in your terminal. The output automatically scales to fit your window.
 
-Simply run the module without arguments. The tool will guide you through selecting an image from the assets/input directory, resizing it, and saving it.
-
-`python -m ascii_art`
-
-### 2. Command Line Interface (CLI) Mode
-
-For faster execution or scripts, pass arguments directly.
-
-Example: Convert an image to 100 width, no preview, saved as 'my_art':
-`python -m ascii_art -i path/to/image.jpg -w 100 -o my_art --no-preview`
-
-Example: Use a custom character set:
-`python -m ascii_art -i path/to/image.jpg -c "@#%*+=-:. "`
-
-## Configuration Options
-
-| Flag | Long Flag | Description |
-| :--- | :--- | :--- |
-| `-i` | `--input` | Path to the input image file. |
-| `-o` | `--output` | Output filename (without extension). |
-| `-w` | `--width` | Target width of the ASCII art. |
-| `-h` | `--height` | Target height of the ASCII art. |
-| `-c` | `--charset` | Custom string of characters to use for mapping. |
-| | `--ratio` | Force a specific aspect ratio (float). |
-| | `--no-preview` | Skip the image preview window. |
-| | `--no-animate` | Disable the typewriter effect in the terminal. |
-| | `--help` | Show the help message and exit. |
-
-## Project Structure
-
+# Local File
 ```sh
-asciify/
-├── assets/
-│   ├── input/       # Place source images here
-│   └── output/      # Generated text files appear here
-├── src/
-│   └── ascii_art/   # Source code
-├── tests/           # Unit tests
-├── pyproject.toml   # Project configuration
-└── README.md
+asciify -i image.jpg
 ```
 
-## Contributing
+# Remote URL
+```sh
+asciify -i https://example.com/logo.png
+```
 
-1. Fork the project.
-2. Create your feature branch (git checkout -b feature/AmazingFeature).
-3. Commit your changes (git commit -m 'Add some AmazingFeature').
-4. Push to the branch (git push origin feature/AmazingFeature).
-5. Open a Pull Request.
+### 2. Color Mode
+
+To view the image with its original colors (using ANSI escape codes):
+```sh
+asciify -i image.jpg --color
+```
+
+### 3. Saving Output
+
+You can save the generated art to a file instead of (or in addition to) printing it.
+
+**Save to current directory (Auto-named):**
+
+asciify -i image.jpg -s
+# Creates: ascii_image_TIMESTAMP.txt
+
+**Save with custom name/location:**
+
+# Save as specific filename (no extension needed)
+asciify -i image.jpg --output-file-name my_art
+
+# Save to a specific folder
+asciify -i image.jpg --output-folder ./art_gallery
+
+**Save as HTML (Preserves Color):**
+
+asciify -i image.jpg --color --html
+
+### 4. Customizing Dimensions
+
+By default, asciify fits the image to your terminal. You can override this:
+
+# Force specific width (Height auto-calculated)
+asciify -i image.jpg --width 100
+
+# Force specific width AND aspect ratio
+asciify -i image.jpg --width 100 --aspect-ratio 2.0
+
+# Downsize by a factor of 4
+asciify -i image.jpg --downsize 4
+
+### 5. Managing Charsets
+
+You can change the characters used for rendering (e.g., standard ASCII, blocks, braille).
+
+**List available charsets:**
+
+asciify --show-charsets
+
+**Use a specific charset for one run:**
+
+asciify -i image.jpg -c blocks
+
+**Set a new default charset (Persistent):**
+
+asciify --set-charset blocks
+# All future runs will now use 'blocks' by default
+
+## Advanced: Interactive Mode
+
+For a more guided, "creative" experience with animations and previews, use the --full flag. This launches the legacy interactive menu.
+
+asciify --full
+
+## Configuration Reference
+
+| Flag | Description |
+| :--- | :--- |
+| -i, --input-file | Path to local image OR URL (http://...). |
+| --color | Enable TrueColor ANSI output. |
+| -s, --save | Save output to current directory. |
+| --output-folder | Specify folder for saved output. |
+| --output-file-name | Specify filename (without extension). |
+| --html | Save as .html file. |
+| --width | Set target width. |
+| --height | Set target height. |
+| --aspect-ratio | Force specific aspect ratio. |
+| --downsize | Downsize image by factor n. |
+| -c, --charset | Use specific charset string. |
+| --show-charsets | List all built-in charsets. |
+| --set-charset | Set default charset preference. |
+| --full | Launch legacy interactive mode. |
 
 ## License
 
