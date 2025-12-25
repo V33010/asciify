@@ -7,7 +7,7 @@ from pathlib import Path
 
 # --- CONFIGURATION ---
 # Set to False to upload to real PyPI
-USE_TESTPYPI = True
+USE_TESTPYPI = False
 
 
 def clean_build_artifacts():
