@@ -1,73 +1,116 @@
 # src/ascii_art/writer.py
+import html
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 
-from .ui import cool_print
-
-# --- SMART PATHING LOGIC ---
-REPO_OUTPUT = Path("assets/output")
-
-if REPO_OUTPUT.exists() and REPO_OUTPUT.is_dir():
-    # Dev Mode: Keep output organized in assets/output
-    OUTPUT_DIR = REPO_OUTPUT
-else:
-    # User Mode: Save to current directory
-    OUTPUT_DIR = Path(".")
-
 
 def clean_filename(name):
+    """Sanitizes a string to be safe for filenames."""
+    # Allow alphanumeric, underscores, and hyphens.
     name_no_ext = os.path.splitext(name)[0]
-    cleaned = re.sub(r"[^a-zA-Z0-9]", "", name_no_ext)
+    cleaned = re.sub(r"[^a-zA-Z0-9_\-]", "", name_no_ext)
     return cleaned
 
 
-def save_art(ascii_grid, original_filename, custom_name=None):
-    # Ensure directory exists (mostly for REPO mode or if user deleted it)
-    if not OUTPUT_DIR.exists():
-        try:
-            os.makedirs(OUTPUT_DIR)
-        except OSError:
-            # Fallback to current dir if permission denied
-            pass
+def generate_html(ascii_grid):
+    """Generates an HTML string from the ASCII grid."""
+    lines = []
+    lines.append("<!DOCTYPE html>")
+    lines.append("<html><head><style>")
+    lines.append(
+        "body { background-color: #000; color: #fff; font-family: monospace; white-space: pre; line-height: 1.0; }"
+    )
+    lines.append("</style></head><body>")
 
-    timestamp = datetime.now().strftime("%d%m%Y-%H%M%S")
+    for row in ascii_grid:
+        line_html = ""
+        for item in row:
+            if isinstance(item, tuple):
+                char, (r, g, b) = item
+                # Escape the char for HTML (<, >, &)
+                safe_char = html.escape(char)
+                line_html += f'<span style="color: rgb({r},{g},{b})">{safe_char}</span>'
+            else:
+                safe_char = html.escape(item)
+                line_html += safe_char
+        lines.append(line_html)
 
-    if custom_name:
-        base_name = clean_filename(custom_name)
-        # If user gave a custom name, use it exactly
-        filename = f"{base_name}.txt"
+    lines.append("</body></html>")
+    return "\n".join(lines)
+
+
+def save_art(
+    ascii_grid, original_filename, output_folder=None, output_name=None, as_html=False
+):
+    """
+    Saves the ASCII art to a file.
+
+    Args:
+        ascii_grid: The 2D list of chars or (char, rgb) tuples.
+        original_filename: Path to the input image (used for auto-naming).
+        output_folder: Directory to save in (defaults to CWD).
+        output_name: Specific filename (WITHOUT extension).
+        as_html: Boolean to save as .html instead of .txt.
+    """
+
+    # 1. Determine Output Directory
+    if output_folder:
+        target_dir = Path(output_folder)
+        if not target_dir.exists():
+            # "make the location first" as requested
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+            except OSError as e:
+                print(f"❌ Error creating directory '{output_folder}': {e}")
+                return None
     else:
-        # Auto-generated name
+        target_dir = Path.cwd()
+
+    # 2. Determine File Name
+    timestamp = datetime.now().strftime("%d%m%Y-%H%M%S")
+    extension = ".html" if as_html else ".txt"
+
+    if output_name:
+        # Check for user-provided extension
+        _, ext = os.path.splitext(output_name)
+        if ext:
+            print(
+                f"❌ Error: Output file name '{output_name}' must NOT include an extension."
+            )
+            return None
+
+        # Use exact name provided by user
+        final_filename = f"{output_name}{extension}"
+    else:
+        # Auto-generate name based on input file
         base_name = clean_filename(Path(original_filename).name)
-        # Prefix with 'ascii_' so we don't get lost in user folders
-        filename = f"ascii_{base_name}_{timestamp}.txt"
+        final_filename = f"ascii_{base_name}_{timestamp}{extension}"
 
-    filepath = OUTPUT_DIR / filename
+    filepath = target_dir / final_filename
 
+    # 3. Write File
     try:
         with open(filepath, "w", encoding="utf-8") as f:
-            for row in ascii_grid:
-                # Handle both standard list output and tuple (color) output logic
-                # For file saving, we strip color info if it exists
-                clean_row = []
-                for item in row:
-                    if isinstance(item, tuple):
-                        # item is (char, rgb)
-                        char = item[0]
-                    else:
-                        # item is char
-                        char = item
+            if as_html:
+                html_content = generate_html(ascii_grid)
+                f.write(html_content)
+            else:
+                for row in ascii_grid:
+                    clean_row = []
+                    for item in row:
+                        if isinstance(item, tuple):
+                            char = item[0]
+                        else:
+                            char = item
+                        # Add space for aspect ratio correction in text files
+                        clean_row.append(char + " ")
+                    f.write("".join(clean_row) + "\n")
 
-                    # Add space for aspect ratio
-                    clean_row.append(char + " ")
-
-                f.write("".join(clean_row))
-                f.write("\n")
-
-        cool_print(f"\nArt saved to file: {filepath}\n")
+        print(f"✅ Output saved to: {filepath}")
         return filepath
+
     except Exception as e:
-        cool_print(f"Error saving file: {e}\n")
+        print(f"❌ Error saving file: {e}")
         return None

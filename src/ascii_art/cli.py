@@ -11,53 +11,62 @@ from . import (converter, image_loader, image_resize, server, terminal, ui,
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert images to ASCII art", add_help=False
+        description="Asciify: Terminal-first ASCII Art Generator", add_help=True
     )
 
-    parser.add_argument("--help", action="help", help="Show this help message and exit")
+    # --- INPUT ---
+    parser.add_argument("-i", "--input-file", help="Path to input image file")
 
-    parser.add_argument("-i", "--input", help="Path to input image")
-    parser.add_argument("-o", "--output", help="Output filename (no extension)")
-    parser.add_argument("-c", "--charset", help="Custom charset string")
-    parser.add_argument("--no-preview", action="store_true", help="Skip image preview")
+    # --- MODE SWITCH ---
     parser.add_argument(
-        "--no-animate", action="store_true", help="Disable text animation"
+        "--full", action="store_true", help="Launch the legacy interactive mode"
     )
 
-    parser.add_argument("-w", "--width", type=int, help="Target width")
-    parser.add_argument("-h", "--height", type=int, help="Target height")
-    parser.add_argument("--ratio", type=float, help="Target aspect ratio")
-
+    # --- OUTPUT FLAGS ---
     parser.add_argument(
-        "--bypass-downsizing",
-        action="store_true",
-        help="Allow downsize ratio < 1 (upscaling)",
+        "-s", "--save", action="store_true", help="Save output to current directory"
     )
-
-    # Terminal Mode Argument
+    parser.add_argument("--output-folder", help="Specify directory for saved output")
     parser.add_argument(
-        "-t",
-        "--terminal",
-        help="Run in headless terminal mode with provided image path",
+        "--output-file-name", help="Specify filename (WITHOUT extension)"
     )
-
-    # Color Flag
     parser.add_argument(
-        "--color",
-        action="store_true",
-        help="Enable colorized output (only works with --terminal)",
+        "--html", action="store_true", help="Save as HTML file (preserves color)"
+    )
+    parser.add_argument("--color", action="store_true", help="Enable colorized output")
+
+    # --- DIMENSION FLAGS ---
+    parser.add_argument("--width", type=int, help="Target width")
+    parser.add_argument("--height", type=int, help="Target height")
+    parser.add_argument("--aspect-ratio", type=float, help="Target aspect ratio")
+    parser.add_argument("--downsize", type=float, help="Downsize factor (n)")
+
+    # --- CHARSET FLAGS ---
+    parser.add_argument(
+        "--show-charsets", action="store_true", help="List available charsets"
+    )
+    parser.add_argument("--set-charset", help="Set the default charset for future runs")
+    parser.add_argument(
+        "-c", "--charset", help="Use a specific charset string for this run"
     )
 
-    return parser.parse_args()
+    # --- LEGACY/FULL MODE ONLY ---
+    parser.add_argument(
+        "--no-preview", action="store_true", help="Skip preview (Full mode only)"
+    )
+    parser.add_argument(
+        "--no-animate", action="store_true", help="Disable animation (Full mode only)"
+    )
+
+    # Parse
+    args = parser.parse_args()
+    return args
 
 
-def process_workflow(args):
-    # --- TERMINAL MODE PATH ---
-    if args.terminal:
-        terminal.run_terminal_mode(args.terminal, args.charset, args.color)
-        return  # Exit workflow immediately
-
-    # --- STANDARD INTERACTIVE / CLI PATH ---
+def run_legacy_interactive_mode(args):
+    """
+    The old interactive workflow for --full flag
+    """
     if args.no_animate:
         ui.CONFIG["animate"] = False
 
@@ -65,10 +74,10 @@ def process_workflow(args):
 
     # Image Selection
     img_path = None
-    if args.input:
-        p = Path(args.input)
+    if args.input_file:
+        p = Path(args.input_file)
         if not p.exists():
-            ui.cool_print(f"Error: Input path '{args.input}' does not exist.\n")
+            ui.cool_print(f"Error: Input path '{args.input_file}' does not exist.\n")
             sys.exit(1)
         img_path = p
     else:
@@ -84,18 +93,19 @@ def process_workflow(args):
 
     # Dimensions
     target_w, target_h = None, None
-    try:
-        target_w, target_h = image_resize.calculate_dimensions(
-            img, args.width, args.height, args.ratio
-        )
-    except ValueError as e:
-        ui.cool_print(f"Error: {e}\n")
-        sys.exit(1)
+
+    # Check flags first, else interactive
+    if args.width or args.height:
+        try:
+            target_w, target_h = image_resize.calculate_dimensions(
+                img, args.width, args.height, args.aspect_ratio
+            )
+        except ValueError as e:
+            ui.cool_print(f"Error: {e}\n")
+            sys.exit(1)
 
     if target_w is None or target_h is None:
-        target_w, target_h = image_resize.interactive_downsize_factor(
-            img, args.bypass_downsizing
-        )
+        target_w, target_h = image_resize.interactive_downsize_factor(img)
 
     # Resize
     img_resized = image_resize.resize_image(img, target_w, target_h)
@@ -112,48 +122,44 @@ def process_workflow(args):
     ascii_grid = converter.image_to_ascii(img_resized, chars)
 
     # Save
-    output_path = writer.save_art(ascii_grid, img_path, args.output)
+    output_path = writer.save_art(
+        ascii_grid, img_path, output_name=args.output_file_name
+    )
     if not output_path:
         return
 
     # Server
     ui.clear_terminal()
     server.start_server_and_open_browser(output_path)
-
     ui.cool_print("\nServer is running. Check your browser.\n")
 
 
 def main():
     args = parse_args()
 
-    if args.output and (os.sep in args.output or "/" in args.output):
-        print("Error: Output must be a filename, not a path.")
+    # --- 1. CHECK FOR NO ARGS ---
+    if len(sys.argv) == 1:
+        # "python -m src.ascii_art -> this will DO NOTHING, AND JUST THROW AN ERROR"
+        print("Error: No arguments provided.")
+        print("Usage: asciify -i <input_file> [options]")
+        print("Try 'asciify --help' for details.")
         sys.exit(1)
 
-    while True:
-        process_workflow(args)
-
-        # If Terminal Mode OR CLI args provided, exit after one run
-        has_cli_args = any(
-            [
-                args.input,
-                args.width,
-                args.height,
-                args.ratio,
-                args.output,
-                args.terminal,
-            ]
-        )
-        if has_cli_args:
-            break
-
-        ui.cool_print("Enter 1 to run again, or any other key to exit: ")
-        choice = input().strip()
-        if choice != "1":
+    # --- 2. BRANCH: FULL INTERACTIVE MODE ---
+    if args.full:
+        while True:
+            run_legacy_interactive_mode(args)
+            # Legacy loop logic
+            ui.cool_print("Enter 1 to run again, or any other key to exit: ")
+            choice = input().strip()
+            if choice != "1":
+                ui.clear_terminal()
+                sys.exit()
             ui.clear_terminal()
-            sys.exit()
 
-        ui.clear_terminal()
+    # --- 3. BRANCH: TERMINAL MODE (DEFAULT) ---
+    # This handles -i, configuration, printing, and saving
+    terminal.run_terminal_pipeline(args)
 
 
 if __name__ == "__main__":
