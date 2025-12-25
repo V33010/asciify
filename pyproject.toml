@@ -1,10 +1,23 @@
+[build-system]
+requires = [ "setuptools", "wheel",]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "asciify"
-version = "0.1.0"
-description = "Add your description here"
+name = "asciify-term"
+version = "0.1.1"
+description = "A hybrid CLI tool for ASCII art generation with terminal and web preview modes."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "numpy>=2.4.0",
-    "pillow>=12.0.0",
-]
+dependencies = [ "numpy>=2.0.0", "pillow>=10.0.0", "toml",]
+[[project.authors]]
+name = "V33010"
+
+[project.license]
+text = "MIT"
+
+[project.scripts]
+asciify = "ascii_art.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/V33010/asciify"
+"Bug Tracker" = "https://github.com/V33010/asciify/issues"
