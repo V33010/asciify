@@ -34,14 +34,10 @@ pip install asciify-term
 
 The primary use case is to quickly view an image in your terminal. The output automatically scales to fit your window.
 
-
 ```sh
 # Local File
 asciify -i image.jpg
-```
 
-
-```sh
 # Remote URL
 asciify -i https://example.com/logo.png
 ```
@@ -77,11 +73,11 @@ asciify -i image.jpg --output-folder ./art_gallery
 asciify -i image.jpg --color --html
 ```
 
-
 ### 4. Customizing Dimensions
 
 By default, asciify fits the image to your terminal. You can override this:
 
+```sh 
 # Force specific width (Height auto-calculated)
 asciify -i image.jpg --width 100
 
@@ -90,29 +86,36 @@ asciify -i image.jpg --width 100 --aspect-ratio 2.0
 
 # Downsize by a factor of 4
 asciify -i image.jpg --downsize 4
+```
 
 ### 5. Managing Charsets
 
 You can change the characters used for rendering (e.g., standard ASCII, blocks, braille).
 
 **List available charsets:**
-
+```sh 
 asciify --show-charsets
+```
 
 **Use a specific charset for one run:**
-
+```sh
 asciify -i image.jpg -c blocks
+```
 
 **Set a new default charset (Persistent):**
-
+```sh 
 asciify --set-charset blocks
 # All future runs will now use 'blocks' by default
+```
+
 
 ## Advanced: Interactive Mode
 
 For a more guided, "creative" experience with animations and previews, use the --full flag. This launches the legacy interactive menu.
 
+```sh 
 asciify --full
+```
 
 ## Configuration Reference
 
