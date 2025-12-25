@@ -14,45 +14,59 @@ def run_terminal_pipeline(args):
     """
 
     # --- 1. CHARSET OPERATIONS ---
-    # Handle --show-charsets
     if hasattr(args, "show_charsets") and args.show_charsets:
         print(f"\nAvailable Charsets:")
         for name, chars in charset_mod.CHARSETS.items():
             print(f"  • {name:<15} : {chars}")
         print()
-        # If input file is NOT provided, we exit here.
-        # If it IS provided, we continue to process the image.
         if not args.input_file:
             return
 
-    # Handle --set-charset
     if hasattr(args, "set_charset") and args.set_charset:
         try:
             charset_mod.set_persistent_charset(args.set_charset)
         except ValueError as e:
             print(f"❌ Error: {e}")
             sys.exit(1)
-        # If no input, exit
         if not args.input_file:
             return
 
-    # --- 2. INPUT VALIDATION ---
+    # --- 2. INPUT VALIDATION & 3. LOAD IMAGE ---
     if not args.input_file:
         print("Error: Input file is required. Use -i/--input-file <path>")
         sys.exit(1)
 
-    p = Path(args.input_file)
-    if not p.exists():
-        print(f"Error: Input file '{args.input_file}' not found.")
-        sys.exit(1)
+    # Check if input is URL or Local File
+    is_url = args.input_file.startswith(("http://", "https://"))
 
-    # --- 3. LOAD IMAGE ---
-    img = image_loader.load_image(p, preview=False)
-    if not img:
-        sys.exit(1)
+    img = None
+    original_path_obj = None
+
+    if is_url:
+        # Load directly (image_loader handles download)
+        img = image_loader.load_image(args.input_file, preview=False)
+        if not img:
+            sys.exit(1)
+
+        # Recover the filename we extracted during download
+        # Default to a safe fallback if missing
+        fname = img.info.get("custom_filename", "downloaded_image.jpg")
+
+        original_path_obj = Path(fname)
+
+    else:
+        # Standard Local File Check
+        p = Path(args.input_file)
+        if not p.exists():
+            print(f"Error: Input file '{args.input_file}' not found.")
+            sys.exit(1)
+
+        original_path_obj = p
+        img = image_loader.load_image(p, preview=False)
+        if not img:
+            sys.exit(1)
 
     # --- 4. CALCULATE DIMENSIONS ---
-    # Check for conflict: 3 flags provided but ratio doesn't match
     if args.width and args.height and args.aspect_ratio:
         calc_ratio = args.width / args.height
         if abs(calc_ratio - args.aspect_ratio) > 0.01:
@@ -63,7 +77,6 @@ def run_terminal_pipeline(args):
 
     target_w, target_h = None, None
 
-    # Case A: User provided specific dimensions
     if args.width or args.height:
         try:
             target_w, target_h = image_resize.calculate_dimensions(
@@ -73,9 +86,7 @@ def run_terminal_pipeline(args):
             print(f"Error: {e}")
             sys.exit(1)
 
-    # Case B: User provided downsize factor
     elif args.downsize:
-        # Custom logic for simple downsize factor
         try:
             factor = float(args.downsize)
             if factor <= 0:
@@ -86,7 +97,6 @@ def run_terminal_pipeline(args):
             print("Error: --downsize must be a positive number.")
             sys.exit(1)
 
-    # Case C: Default (Auto-fit to terminal)
     else:
         target_w, target_h = image_resize.get_auto_terminal_dimensions(img)
 
@@ -94,7 +104,6 @@ def run_terminal_pipeline(args):
     img_resized = image_resize.resize_image(img, target_w, target_h)
 
     # --- 6. DETERMINE CHARSET ---
-    # args.charset is the custom flag (-c). get_charset handles the priority logic.
     try:
         chars = charset_mod.get_charset(args.charset)
     except ValueError as e:
@@ -108,17 +117,12 @@ def run_terminal_pipeline(args):
         ascii_grid = converter.image_to_ascii(img_resized, chars)
 
     # --- 8. OUTPUT TO TERMINAL ---
-    # We always print unless user explicitly suppressed it?
-    # Prompt says: "printing output in the terminal will be the default thing happening."
-    # If saving is requested, we usually still print, unless the output is huge, but prompt implies printing AND saving is possible.
-
-    # Render string for terminal
     for row in ascii_grid:
         line_parts = []
         for item in row:
             if isinstance(item, tuple):
                 char, (r, g, b) = item
-                display_str = char + "."  # specific dot styling
+                display_str = char + "."
                 colored_str = ui.get_ansi_colored_string(display_str, r, g, b)
                 line_parts.append(colored_str)
             else:
@@ -133,7 +137,7 @@ def run_terminal_pipeline(args):
     if should_save:
         writer.save_art(
             ascii_grid,
-            original_filename=p,
+            original_filename=original_path_obj,
             output_folder=args.output_folder,
             output_name=args.output_file_name,
             as_html=args.html,
