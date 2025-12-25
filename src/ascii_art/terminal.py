@@ -44,8 +44,10 @@ def run_terminal_mode(path_str, charset_arg, color_flag):
         for row in ascii_grid:
             line_parts = []
             for char, (r, g, b) in row:
-                # Apply the specific "dot" styling user requested, but colored
+                # Apply the "dot" styling but colored
                 display_str = char + "ˑ" if char != " " else char + " "
+                # display_str = char + " "
+                # display_str = char + char
 
                 # Wrap in ANSI codes
                 colored_str = ui.get_ansi_colored_string(display_str, r, g, b)
@@ -58,7 +60,7 @@ def run_terminal_mode(path_str, charset_arg, color_flag):
         ascii_grid = converter.image_to_ascii(img_resized, chars)
 
         for row in ascii_grid:
-            # Apply the specific "dot" styling user requested
+            # Apply the specific "dot" styling
             sys.stdout.write(
                 "".join([char + "ˑ" if char != " " else char + " " for char in row])
                 + "\n"
