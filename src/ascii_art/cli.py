@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import charset as charset_mod
+from . import terminal  # Imported the new module
 from . import converter, image_loader, image_resize, server, ui, writer
 
 
@@ -23,29 +24,46 @@ def parse_args():
         "--no-animate", action="store_true", help="Disable text animation"
     )
 
-    # Dimension arguments
     parser.add_argument("-w", "--width", type=int, help="Target width")
     parser.add_argument("-h", "--height", type=int, help="Target height")
     parser.add_argument("--ratio", type=float, help="Target aspect ratio")
 
-    # New Flag
     parser.add_argument(
         "--bypass-downsizing",
         action="store_true",
         help="Allow downsize ratio < 1 (upscaling)",
     )
 
+    # New Terminal Mode Argument
+    parser.add_argument(
+        "-t",
+        "--terminal",
+        help="Run in headless terminal mode with provided image path",
+    )
+
+    # New Color Flag
+    parser.add_argument(
+        "--color",
+        action="store_true",
+        help="Enable colorized output (only works with --terminal)",
+    )
+
     return parser.parse_args()
 
 
 def process_workflow(args):
-    # 1. Setup UI
+    # --- TERMINAL MODE PATH ---
+    if args.terminal:
+        terminal.run_terminal_mode(args.terminal, args.charset, args.color)
+        return  # Exit workflow immediately
+
+    # --- STANDARD INTERACTIVE / CLI PATH ---
     if args.no_animate:
         ui.CONFIG["animate"] = False
 
     ui.print_header()
 
-    # 2. Image Selection
+    # Image Selection
     img_path = None
     if args.input:
         p = Path(args.input)
@@ -58,16 +76,14 @@ def process_workflow(args):
         if not img_path:
             return
 
-    # 3. Load Image
+    # Load Image
     do_preview = not args.no_preview
     img = image_loader.load_image(img_path, preview=do_preview)
     if not img:
         return
 
-    # 4. Determine Dimensions
+    # Dimensions
     target_w, target_h = None, None
-
-    # Check if user provided explicit dimensions via flags
     try:
         target_w, target_h = image_resize.calculate_dimensions(
             img, args.width, args.height, args.ratio
@@ -76,34 +92,31 @@ def process_workflow(args):
         ui.cool_print(f"Error: {e}\n")
         sys.exit(1)
 
-    # If NOT provided via flags, use the new Interactive Downsize Workflow
     if target_w is None or target_h is None:
         target_w, target_h = image_resize.interactive_downsize_factor(
             img, args.bypass_downsizing
         )
 
-    # 5. Resize
-    # We don't need to show a confirmation preview for this anymore
-    # because the math is predictable (Just dividing by n).
+    # Resize
     img_resized = image_resize.resize_image(img, target_w, target_h)
 
-    # 6. Charset
+    # Charset
     try:
         chars = charset_mod.get_charset(args.charset)
     except ValueError as e:
         ui.cool_print(f"Error: {e}\n")
         sys.exit(1)
 
-    # 7. Convert
+    # Convert
     ui.cool_print(f"Converting to {target_w}x{target_h}...\n")
     ascii_grid = converter.image_to_ascii(img_resized, chars)
 
-    # 8. Save
+    # Save
     output_path = writer.save_art(ascii_grid, img_path, args.output)
     if not output_path:
         return
 
-    # 9. Server
+    # Server
     ui.clear_terminal()
     server.start_server_and_open_browser(output_path)
 
@@ -113,16 +126,23 @@ def process_workflow(args):
 def main():
     args = parse_args()
 
-    if args.output:
-        if os.sep in args.output or "/" in args.output:
-            print("Error: Output must be a filename, not a path.")
-            sys.exit(1)
+    if args.output and (os.sep in args.output or "/" in args.output):
+        print("Error: Output must be a filename, not a path.")
+        sys.exit(1)
 
     while True:
         process_workflow(args)
 
+        # If Terminal Mode OR CLI args provided, exit after one run
         has_cli_args = any(
-            [args.input, args.width, args.height, args.ratio, args.output]
+            [
+                args.input,
+                args.width,
+                args.height,
+                args.ratio,
+                args.output,
+                args.terminal,
+            ]
         )
         if has_cli_args:
             break
