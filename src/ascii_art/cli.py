@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import charset as charset_mod
+from . import terminal  # Imported the new module
 from . import converter, image_loader, image_resize, server, ui, writer
 
 
@@ -40,61 +41,20 @@ def parse_args():
         help="Run in headless terminal mode with provided image path",
     )
 
+    # New Color Flag
+    parser.add_argument(
+        "--color",
+        action="store_true",
+        help="Enable colorized output (only works with --terminal)",
+    )
+
     return parser.parse_args()
 
 
 def process_workflow(args):
     # --- TERMINAL MODE PATH ---
     if args.terminal:
-        # 1. Validate Input
-        p = Path(args.terminal)
-        if not p.exists():
-            print(f"Error: File '{args.terminal}' not found.")
-            sys.exit(1)
-
-        # 2. Load Image (No Previews, No "Smart Open")
-        # We use strict loading because we are likely in a headless env
-        img = image_loader.load_image(p, preview=False)
-        if not img:
-            sys.exit(1)
-
-        # 3. Auto-Calculate Sensible Dimensions
-        target_w, target_h = image_resize.get_auto_terminal_dimensions(img)
-
-        # 4. Resize
-        img_resized = image_resize.resize_image(img, target_w, target_h)
-
-        # 5. Get Charset
-        try:
-            chars = charset_mod.get_charset(args.charset)
-        except ValueError as e:
-            print(f"Error: {e}")
-            sys.exit(1)
-
-        # 6. Convert
-        ascii_grid = converter.image_to_ascii(img_resized, chars)
-
-        # 7. Soft Clear & Print
-        ui.soft_clear()
-
-        # Print row by row
-        for row in ascii_grid:
-            # Note: We usually add a space in writer.py, but for direct terminal view
-            # without saving to file, simpler is often better.
-            # However, to keep consistency with the 'Square' look:
-            # sys.stdout.write("".join([char + " " for char in row]) + "\n")
-            # sys.stdout.write(
-            #     "".join([char + "" for char in row]) + "\n"
-            # )  # test without space
-            # sys.stdout.write(
-            #     "".join([char + char for char in row]) + "\n"
-            # )  # test 2 characters
-
-            sys.stdout.write(
-                "".join([char + "ˑ" if char != " " else char + " " for char in row])
-                + "\n"
-            )  # test .
-
+        terminal.run_terminal_mode(args.terminal, args.charset, args.color)
         return  # Exit workflow immediately
 
     # --- STANDARD INTERACTIVE / CLI PATH ---

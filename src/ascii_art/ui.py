@@ -33,3 +33,11 @@ def soft_clear():
 def print_header():
     clear_terminal()
     cool_print("\n=== ASCII ART GENERATOR ===\n\n")
+
+
+def get_ansi_colored_string(char, r, g, b):
+    """
+    Returns the character wrapped in TrueColor (24-bit) ANSI escape codes.
+    Format: \033[38;2;R;G;Bm{char}\033[0m
+    """
+    return f"\033[38;2;{r};{g};{b}m{char}\033[0m"
