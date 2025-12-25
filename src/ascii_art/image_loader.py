@@ -6,11 +6,10 @@ from pathlib import Path
 
 from PIL import Image
 
+from . import url_image_loader  # Import new handler
 from .ui import clear_terminal, cool_print
 
 # --- SMART PATHING LOGIC ---
-# If running inside the dev repo, use assets/input.
-# If installed via pip (user mode), use the current working directory.
 REPO_INPUT = Path("assets/input")
 if REPO_INPUT.exists() and REPO_INPUT.is_dir():
     INPUT_DIR = REPO_INPUT
@@ -19,16 +18,11 @@ else:
     INPUT_DIR = Path(".")
     MODE = "USER"
 
-# Supported extensions to filter noise in User Mode
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 
 
 def list_and_select_image():
-    # In User Mode, we don't error if dir is missing (it's always '.')
-    # But we might error if no images are found.
-
     files = []
-    # Use glob to find files, but filter by extension
     for filepath in INPUT_DIR.iterdir():
         if filepath.is_file():
             if filepath.suffix.lower() in IMAGE_EXTENSIONS:
@@ -42,13 +36,11 @@ def list_and_select_image():
             cool_print("Tip: Run this command inside a folder containing images.\n")
         return None
 
-    # Sort by modification time (descending)
     files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     cool_print(f"Scanning: {INPUT_DIR.resolve()}\n")
     cool_print("Available images (sorted by newest):\n")
 
-    # Limit list to top 15 to avoid cluttering terminal in large folders
     max_show = 15
     for idx, f in enumerate(files[:max_show]):
         print(f"[{idx}] {f.name}")
@@ -96,12 +88,33 @@ def _smart_preview(path):
         return False
 
 
-def load_image(path, preview=True):
+def load_image(source, preview=True):
+    """
+    Loads an image from a Path object OR a URL string.
+    """
+    # 1. URL HANDLING
+    if isinstance(source, str) and source.startswith(("http://", "https://")):
+        # URLs are never previewed (we don't save to disk)
+        data, filename = url_image_loader.download_image(source)
+        if not data:
+            return None
+
+        try:
+            img = Image.open(data)
+            # Attach the original filename to the object metadata
+            # This allows terminal.py to use it for saving without a real file path
+            img.info["custom_filename"] = filename
+            return img
+        except Exception as e:
+            cool_print(f"Error opening downloaded image data: {e}\n")
+            return None
+
+    # 2. LOCAL FILE HANDLING
     try:
-        img = Image.open(path)
+        img = Image.open(source)
         if preview:
-            cool_print(f"Opening {path} for preview...\n")
-            success = _smart_preview(path)
+            cool_print(f"Opening {source} for preview...\n")
+            success = _smart_preview(source)
             if not success:
                 cool_print("Warning: No suitable display found. Skipping preview.\n")
         return img
