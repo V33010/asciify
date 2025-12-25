@@ -83,7 +83,7 @@ def get_auto_terminal_dimensions(img):
     term_w, term_h = shutil.get_terminal_size()
 
     # We remove 1 line from height to leave room for the cursor/prompt at the bottom
-    # We keep width as-is, or remove 1 if your terminal auto-wraps aggressively
+    # We keep width as-is, or remove 1 if terminal auto-wraps aggressively
     max_w = term_w
     max_h = term_h - 1
 
@@ -91,7 +91,7 @@ def get_auto_terminal_dimensions(img):
 
     # 2. Define Font Correction
     # Terminal characters are tall (~2x height of width).
-    # To maintain visual aspect ratio, we must squash the height by ~0.5.
+    # To maintain visual aspect ratio, we must squash the height by ~0.5-0.8.
     FONT_ASPECT_CORRECTION = 0.75
 
     # 3. Calculate "n" needed to fit Width

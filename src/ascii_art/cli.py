@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 from . import charset as charset_mod
-from . import terminal  # Imported the new module
-from . import converter, image_loader, image_resize, server, ui, writer
+from . import (converter, image_loader, image_resize, server, terminal, ui,
+               writer)
 
 
 def parse_args():
@@ -34,14 +34,14 @@ def parse_args():
         help="Allow downsize ratio < 1 (upscaling)",
     )
 
-    # New Terminal Mode Argument
+    # Terminal Mode Argument
     parser.add_argument(
         "-t",
         "--terminal",
         help="Run in headless terminal mode with provided image path",
     )
 
-    # New Color Flag
+    # Color Flag
     parser.add_argument(
         "--color",
         action="store_true",

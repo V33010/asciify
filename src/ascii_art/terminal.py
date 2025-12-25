@@ -62,7 +62,8 @@ def run_terminal_mode(path_str, charset_arg, color_flag):
 
         for row in ascii_grid:
             # Apply the specific "dot" styling
-            sys.stdout.write(
-                "".join([char + "ˑ" if char != " " else char + " " for char in row])
-                + "\n"
-            )
+            # sys.stdout.write(
+            #     "".join([char + "ˑ" if char != " " else char + " " for char in row])
+            #     + "\n"
+            # )
+            sys.stdout.write("".join([char + " " for char in row]) + "\n")
