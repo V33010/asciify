@@ -1,8 +1,8 @@
 # Asciify Term
 
 ![PyPI - Version](https://img.shields.io/pypi/v/asciify-term?style=flat-square&color=blue)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/asciify-term?style=flat-square)
-![PyPI - License](https://img.shields.io/pypi/l/asciify-term?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.12-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/asciify-term?style=flat-square)
 
 **Asciify Term** is a modern, cross-platform CLI utility that renders high-resolution images as ASCII art directly in your terminal.
