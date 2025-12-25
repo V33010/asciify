@@ -45,8 +45,9 @@ def run_terminal_mode(path_str, charset_arg, color_flag):
             line_parts = []
             for char, (r, g, b) in row:
                 # Apply the "dot" styling but colored
-                display_str = char + "ˑ" if char != " " else char + " "
+                # display_str = char + "ˑ" if char != " " else char + " "
                 # display_str = char + " "
+                display_str = char + "."
                 # display_str = char + char
 
                 # Wrap in ANSI codes

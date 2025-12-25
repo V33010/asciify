@@ -20,10 +20,10 @@ def get_charset(custom_charset=None):
             return custom_charset
         else:
             raise ValueError("Custom charset must be a non-empty string.")
-    # return DEFAULT_CHARSET
+    return DEFAULT_CHARSET
     # return BLOCKS_CHARSET
     # return CYBERPUNK_CHARSET
-    return BLOCKS_EXTNEDED_CHARSET
+    # return BLOCKS_EXTNEDED_CHARSET
     # return BRAILLE_CHARSET
     # return TECH_SHADER_CHARSET
     # return SIMPLE_CHARSET
