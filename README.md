@@ -34,13 +34,15 @@ pip install asciify-term
 
 The primary use case is to quickly view an image in your terminal. The output automatically scales to fit your window.
 
-# Local File
+
 ```sh
+# Local File
 asciify -i image.jpg
 ```
 
-# Remote URL
+
 ```sh
+# Remote URL
 asciify -i https://example.com/logo.png
 ```
 
@@ -56,21 +58,25 @@ asciify -i image.jpg --color
 You can save the generated art to a file instead of (or in addition to) printing it.
 
 **Save to current directory (Auto-named):**
-
+```sh
 asciify -i image.jpg -s
 # Creates: ascii_image_TIMESTAMP.txt
+```
 
 **Save with custom name/location:**
-
+```sh 
 # Save as specific filename (no extension needed)
 asciify -i image.jpg --output-file-name my_art
 
 # Save to a specific folder
 asciify -i image.jpg --output-folder ./art_gallery
+```
 
 **Save as HTML (Preserves Color):**
-
+```sh 
 asciify -i image.jpg --color --html
+```
+
 
 ### 4. Customizing Dimensions
 
