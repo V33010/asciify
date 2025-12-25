@@ -8,29 +8,54 @@ from PIL import Image
 
 from .ui import clear_terminal, cool_print
 
-# Define paths relative to the project root
-INPUT_DIR = Path("assets/input")
+# --- SMART PATHING LOGIC ---
+# If running inside the dev repo, use assets/input.
+# If installed via pip (user mode), use the current working directory.
+REPO_INPUT = Path("assets/input")
+if REPO_INPUT.exists() and REPO_INPUT.is_dir():
+    INPUT_DIR = REPO_INPUT
+    MODE = "REPO"
+else:
+    INPUT_DIR = Path(".")
+    MODE = "USER"
+
+# Supported extensions to filter noise in User Mode
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 
 
 def list_and_select_image():
-    if not INPUT_DIR.exists():
-        cool_print(f"Error: Directory {INPUT_DIR} does not exist.\n")
-        return None
+    # In User Mode, we don't error if dir is missing (it's always '.')
+    # But we might error if no images are found.
 
     files = []
+    # Use glob to find files, but filter by extension
     for filepath in INPUT_DIR.iterdir():
-        if filepath.is_file() and filepath.name != ".gitkeep":
-            files.append(filepath)
+        if filepath.is_file():
+            if filepath.suffix.lower() in IMAGE_EXTENSIONS:
+                files.append(filepath)
 
     if not files:
-        cool_print("No files found in assets/input/\n")
+        if MODE == "REPO":
+            cool_print(f"No files found in {INPUT_DIR}\n")
+        else:
+            cool_print("No image files found in the current directory.\n")
+            cool_print("Tip: Run this command inside a folder containing images.\n")
         return None
 
+    # Sort by modification time (descending)
     files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
+    cool_print(f"Scanning: {INPUT_DIR.resolve()}\n")
     cool_print("Available images (sorted by newest):\n")
-    for idx, f in enumerate(files):
+
+    # Limit list to top 15 to avoid cluttering terminal in large folders
+    max_show = 15
+    for idx, f in enumerate(files[:max_show]):
         print(f"[{idx}] {f.name}")
+
+    if len(files) > max_show:
+        print(f"... and {len(files) - max_show} more.")
+
     print()
 
     while True:
@@ -47,17 +72,9 @@ def list_and_select_image():
 
 
 def _smart_preview(path):
-    """
-    Attempts to open the image using the best available method
-    without causing error dump noise.
-    """
     path_str = str(path)
-
-    # 1. WSL Strategy: Try using Windows native 'start' via PowerShell
-    # This is fast, silent, and uses the default Windows Photo Viewer.
     if shutil.which("powershell.exe"):
         try:
-            # We redirect stderr to DEVNULL to silence any 'interop' warnings
             subprocess.run(
                 ["powershell.exe", "-c", "start", f"'{path_str}'"],
                 stdout=subprocess.DEVNULL,
@@ -67,13 +84,10 @@ def _smart_preview(path):
         except Exception:
             pass
 
-    # 2. Linux Strategy: Check if a GUI (X11/Wayland) is actually available.
-    # If variables are missing, img.show() will fail/crash, so we skip it.
     has_display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
     if not has_display:
         return False
 
-    # 3. Fallback: Standard PIL show
     try:
         img = Image.open(path)
         img.show()
@@ -85,20 +99,11 @@ def _smart_preview(path):
 def load_image(path, preview=True):
     try:
         img = Image.open(path)
-
         if preview:
             cool_print(f"Opening {path} for preview...\n")
-
             success = _smart_preview(path)
-
             if not success:
                 cool_print("Warning: No suitable display found. Skipping preview.\n")
-            else:
-                # If we successfully opened it, we might want a tiny cleanup
-                # but no massive delays or clear_terminal is needed anymore
-                # because we silenced the stderr in the subprocess call.
-                pass
-
         return img
     except Exception as e:
         cool_print(f"Error loading image: {e}\n")
