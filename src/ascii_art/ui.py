@@ -30,6 +30,14 @@ def soft_clear():
     print("\033[H\033[J", end="")
 
 
+def move_cursor_home():
+    """
+    Moves cursor to (0,0) without clearing the screen.
+    Used for video rendering to overwrite the previous frame.
+    """
+    print("\033[H", end="")
+
+
 def print_header():
     clear_terminal()
     cool_print("\n=== ASCII ART GENERATOR ===\n\n")
