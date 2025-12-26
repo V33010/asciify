@@ -4,15 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asciify-term"
-version = "0.3.0"
+version = "0.4.0"
 description = "A hybrid CLI tool for ASCII art generation with terminal and web preview modes."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
- "numpy>=2.0.0",
- "opencv-python>=4.11.0.86",
- "pillow>=10.0.0",
-]
+dependencies = [ "numpy>=2.0.0", "opencv-python>=4.11.0.86", "pillow>=10.0.0",]
 [[project.authors]]
 name = "V33010"
 
