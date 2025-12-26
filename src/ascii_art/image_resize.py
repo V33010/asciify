@@ -78,50 +78,41 @@ def get_auto_terminal_dimensions(img):
     the current terminal view using the 'Downsize Factor n' approach.
     """
     # 1. Get Terminal Size
-    # Fallback to 80x24 if detection fails
-    # term_w, term_h = shutil.get_terminal_size((80, 24))
     term_w, term_h = shutil.get_terminal_size()
 
+    # 2. Adjust for Rendering Logic (The "Double Width" Fix)
+    # The renderer prints 2 characters for every 1 pixel (char + space/dot)
+    # to correct aspect ratio. Therefore, our "logical max width" is
+    # half the physical terminal width.
+    # We subtract 2 extra columns for safety (avoid edge-case wrapping).
+    max_w = (term_w // 2) - 2
+
     # We remove 1 line from height to leave room for the cursor/prompt at the bottom
-    # We keep width as-is, or remove 1 if terminal auto-wraps aggressively
-    max_w = term_w
     max_h = term_h - 1
 
     iw, ih = img.size
 
-    # 2. Define Font Correction
-    # Terminal characters are tall (~2x height of width).
-    # To maintain visual aspect ratio, we must squash the height by ~0.5-0.8.
+    # 3. Define Font Correction
+    # This corrects vertical squash, but the horizontal spread is handled by max_w above.
     FONT_ASPECT_CORRECTION = 0.75
 
-    # 3. Calculate "n" needed to fit Width
+    # 4. Calculate "n" needed to fit Width
     # Formula: new_w = iw / n  =>  n = iw / new_w
-    # We want new_w <= max_w, so:
     n_width = iw / max_w
 
-    # 4. Calculate "n" needed to fit Height
+    # 5. Calculate "n" needed to fit Height
     # Formula: new_h = (ih / n) * 0.5  =>  n = (ih * 0.5) / new_h
-    # We want new_h <= max_h, so:
     n_height = (ih * FONT_ASPECT_CORRECTION) / max_h
 
-    # 5. Determine Final 'n'
-    # To satisfy BOTH constraints (Width fit AND Height fit),
-    # we must use the LARGER 'n' (which produces the smaller image).
-    # This automatically handles the "Landscape vs Portrait" logic:
-    # - If Portrait, ih is big, so n_height will likely be bigger -> Fits to Height.
-    # - If Landscape, iw is big, so n_width will likely be bigger -> Fits to Width.
-    # - If Landscape but super tall result (the "catch"), n_height becomes bigger -> Fits to Height.
+    # 6. Determine Final 'n'
+    # Use the larger n to satisfy the strictest constraint.
     n = max(n_width, n_height)
 
-    # Sanity check: prevent upscaling (n < 1) unless you want tiny images to fill screen.
-    # For a viewer, usually we accept n < 1 (zoom in), but if you prefer strictly
-    # "Fit inside but don't upscale", uncomment the next line:
-    # n = max(n, 1.0)
-
+    # Sanity check: prevent div by zero
     if n == 0:
-        n = 1  # Prevent div by zero for weird edge cases
+        n = 1
 
-    # 6. Calculate Final Dimensions
+    # 7. Calculate Final Dimensions
     final_w = int(iw / n)
     final_h = int((ih / n) * FONT_ASPECT_CORRECTION)
 
