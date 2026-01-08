@@ -5,11 +5,8 @@ edition = "2021"
 
 [lib]
 name = "ascii_art_rs"
-crate-type = [ "cdylib",]
+crate-type = ["cdylib"]
 
 [dependencies]
-numpy = "0.21"
-
-[dependencies.pyo3]
-version = "0.21"
-features = [ "extension-module",]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+numpy = "0.22"
