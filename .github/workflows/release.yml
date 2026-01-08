@@ -14,20 +14,40 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     env:
-      PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1  # Prevents crash on newer Python versions
+      PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
     steps:
       - uses: actions/checkout@v4
+      
+      # 1. Build Wheels
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           args: --release --out dist --find-interpreter
           sdist: true
           manylinux: auto
+
+      # 2. Build Standalone Binary (PyInstaller)
+      - name: Build Standalone Executable
+        run: |
+          pip install pyinstaller
+          pip install .  # Install our package into the runner environment
+          # Create a simple entry script
+          echo "from ascii_art.cli import main; main()" > entry_point.py
+          # Build it
+          pyinstaller --onefile --name asciify-linux entry_point.py
+      
+      # 3. Upload Artifacts (Separated)
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux
-          path: dist
+          path: dist/*
+          
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux
+          path: dist/asciify-linux
 
   # --- JOB 2: WINDOWS BUILD ---
   windows:
@@ -36,15 +56,33 @@ jobs:
       PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
     steps:
       - uses: actions/checkout@v4
+      
+      # 1. Build Wheels
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           args: --release --out dist --find-interpreter
+
+      # 2. Build Standalone Binary (PyInstaller)
+      - name: Build Standalone Executable
+        run: |
+          pip install pyinstaller
+          pip install .
+          echo "from ascii_art.cli import main; main()" > entry_point.py
+          pyinstaller --onefile --name asciify-windows entry_point.py
+
+      # 3. Upload Artifacts
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows
-          path: dist
+          path: dist/*.whl
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-windows
+          path: dist/asciify-windows.exe
 
   # --- JOB 3: MACOS BUILD ---
   macos:
@@ -53,37 +91,71 @@ jobs:
       PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
     steps:
       - uses: actions/checkout@v4
+      
+      # 1. Build Wheels
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           args: --release --out dist --find-interpreter
+
+      # 2. Build Standalone Binary (PyInstaller)
+      - name: Build Standalone Executable
+        run: |
+          pip install pyinstaller
+          pip install .
+          echo "from ascii_art.cli import main; main()" > entry_point.py
+          pyinstaller --onefile --name asciify-macos entry_point.py
+
+      # 3. Upload Artifacts
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos
-          path: dist
+          path: dist/*.whl
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-macos
+          path: dist/asciify-macos
 
   # --- JOB 4: PUBLISH & RELEASE ---
   release:
     name: Release
     runs-on: ubuntu-latest
     needs: [linux, windows, macos]
+    environment:      
+      name: pypi      
+      url: https://pypi.org/p/asciify-term
     steps:
+      # 1. Download Wheels
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
 
+      # 2. Download Binaries (for GitHub Release only)
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: binaries
+          merge-multiple: true
+
+      # 3. Create GitHub Release (Includes Wheels AND Binaries)
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          # Upload everything in dist (wheels) AND binaries folder
+          files: |
+            dist/*
+            binaries/*
           draft: false
           prerelease: false
           generate_release_notes: true
 
+      # 4. Publish to PyPI (Wheels Only)
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@release/v1 # LOWERCASE FIXED
         with:
-          packages_dir: dist
+          packages-dir: dist  # KEBAB-CASE FIXED
