@@ -1,16 +1,15 @@
 [package]
 name = "ascii_art_rs"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2021"
 
-# "cdylib" is required for Python extension modules
 [lib]
 name = "ascii_art_rs"
-crate-type = ["cdylib"]
+crate-type = [ "cdylib",]
 
 [dependencies]
-# PyO3: The bridge between Rust and Python
-pyo3 = { version = "0.21", features = ["extension-module"] }
-
-# numpy: To read the image data passed from Python directly
 numpy = "0.21"
+
+[dependencies.pyo3]
+version = "0.21"
+features = [ "extension-module",]

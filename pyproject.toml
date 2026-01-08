@@ -1,20 +1,14 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
+requires = [ "maturin>=1.0,<2.0",]
 build-backend = "maturin"
 
 [project]
 name = "asciify-term"
-version = "0.4.0"
+version = "0.5.0"
 description = "A hybrid CLI tool for ASCII art generation with terminal and web preview modes."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "maturin>=1.11.2",
-    "numpy>=2.0.0",
-    "opencv-python>=4.11.0.86",
-    "pillow>=10.0.0",
-]
-
+dependencies = [ "maturin>=1.11.2", "numpy>=2.0.0", "opencv-python>=4.11.0.86", "pillow>=10.0.0",]
 [[project.authors]]
 name = "V33010"
 
@@ -29,6 +23,5 @@ Homepage = "https://github.com/V33010/asciify"
 "Bug Tracker" = "https://github.com/V33010/asciify/issues"
 
 [tool.maturin]
-module-name = "ascii_art.ascii_art_rs" 
-# Binding directly into the package structure
+module-name = "ascii_art.ascii_art_rs"
 python-source = "src"
