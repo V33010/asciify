@@ -9,21 +9,31 @@ def read_current_version(pyproject_path: Path) -> str:
     return data["project"]["version"]
 
 
-def write_new_version(pyproject_path: Path, version_file: Path, new_version: str):
+def write_new_version(
+    pyproject_path: Path, cargo_path: Path, version_file: Path, new_version: str
+):
     # 1. Update pyproject.toml
     data = toml.load(pyproject_path)
     data["project"]["version"] = new_version
-
     with open(pyproject_path, "w", encoding="utf-8") as f:
         toml.dump(data, f)
-
     print(f"✅ Updated pyproject.toml to version {new_version}")
 
-    # 2. Update src/ascii_art/__version__.py
-    # Ensure parent dir exists
-    version_file.parent.mkdir(parents=True, exist_ok=True)
+    # 2. Update Cargo.toml (NEW)
+    if cargo_path.exists():
+        cargo_data = toml.load(cargo_path)
+        if "package" in cargo_data:
+            cargo_data["package"]["version"] = new_version
+            with open(cargo_path, "w", encoding="utf-8") as f:
+                toml.dump(cargo_data, f)
+            print(f"✅ Updated Cargo.toml to version {new_version}")
+        else:
+            print("⚠️  Warning: [package] section not found in Cargo.toml")
+    else:
+        print("⚠️  Warning: Cargo.toml not found")
 
-    # Write the Python version file
+    # 3. Update src/ascii_art/__version__.py
+    version_file.parent.mkdir(parents=True, exist_ok=True)
     version_file.write_text(f'__version__ = "{new_version}"\n', encoding="utf-8")
     print(f"✅ Updated {version_file} to version {new_version}")
 
@@ -50,19 +60,21 @@ def confirm_bump(old: str, new: str) -> bool:
     return response in ["y", "yes"]
 
 
-def manual_mode(pyproject_path: Path, version_file: Path, current_version: str):
+def manual_mode(
+    pyproject_path: Path, cargo_path: Path, version_file: Path, current_version: str
+):
     print(f"📦 Current version: {current_version}")
     new_version = input("🔧 Enter new version: ").strip()
     if not new_version or new_version == current_version:
         print("⚠️  No change made. Exiting.")
         return
-    write_new_version(pyproject_path, version_file, new_version)
+    write_new_version(pyproject_path, cargo_path, version_file, new_version)
     print(f"✅ Manual bump: {current_version} → {new_version}")
 
 
 def main():
     pyproject_path = Path("pyproject.toml")
-    # UPDATED PATH to match your project structure
+    cargo_path = Path("Cargo.toml")
     version_file = Path("src/ascii_art/__version__.py")
 
     if not pyproject_path.exists():
@@ -72,20 +84,20 @@ def main():
     current_version = read_current_version(pyproject_path)
 
     if len(sys.argv) == 1:
-        manual_mode(pyproject_path, version_file, current_version)
+        manual_mode(pyproject_path, cargo_path, version_file, current_version)
         return
 
     command = sys.argv[1].lower()
 
     if command == "patch":
         new_version = bump_patch(current_version)
-        write_new_version(pyproject_path, version_file, new_version)
+        write_new_version(pyproject_path, cargo_path, version_file, new_version)
         print(f"✅ Patch bump: {current_version} → {new_version}")
 
     elif command == "minor":
         new_version = bump_minor(current_version)
         if confirm_bump(current_version, new_version):
-            write_new_version(pyproject_path, version_file, new_version)
+            write_new_version(pyproject_path, cargo_path, version_file, new_version)
             print(f"✅ Minor bump: {current_version} → {new_version}")
         else:
             print("❌ Cancelled.")
@@ -93,7 +105,7 @@ def main():
     elif command == "major":
         new_version = bump_major(current_version)
         if confirm_bump(current_version, new_version):
-            write_new_version(pyproject_path, version_file, new_version)
+            write_new_version(pyproject_path, cargo_path, version_file, new_version)
             print(f"✅ Major bump: {current_version} → {new_version}")
         else:
             print("❌ Cancelled.")
