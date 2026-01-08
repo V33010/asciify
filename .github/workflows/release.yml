@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 1. Build Wheels
+      # 1. Build Wheels & Source Dist
       - uses: PyO3/maturin-action@v1
         with:
           command: build
@@ -30,18 +30,19 @@ jobs:
       - name: Build Standalone Executable
         run: |
           pip install pyinstaller
-          pip install .  # Install our package into the runner environment
-          # Create a simple entry script
+          pip install .
           echo "from ascii_art.cli import main; main()" > entry_point.py
-          # Build it
           pyinstaller --onefile --name asciify-linux entry_point.py
       
-      # 3. Upload Artifacts (Separated)
+      # 3. Upload Artifacts
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux
-          path: dist/*
+          # FIX: Be specific so we don't accidentally upload the binary as a wheel
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
           
       - name: Upload executable
         uses: actions/upload-artifact@v4
@@ -124,8 +125,9 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs: [linux, windows, macos]
-    environment:      
-      name: pypi      
+    # FIX: Explicitly link to the PyPI environment
+    environment:
+      name: pypi
       url: https://pypi.org/p/asciify-term
     steps:
       # 1. Download Wheels
@@ -135,18 +137,17 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # 2. Download Binaries (for GitHub Release only)
+      # 2. Download Binaries
       - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           path: binaries
           merge-multiple: true
 
-      # 3. Create GitHub Release (Includes Wheels AND Binaries)
+      # 3. Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Upload everything in dist (wheels) AND binaries folder
           files: |
             dist/*
             binaries/*
@@ -154,8 +155,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
 
-      # 4. Publish to PyPI (Wheels Only)
+      # 4. Publish to PyPI
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1 # LOWERCASE FIXED
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist  # KEBAB-CASE FIXED
+          packages-dir: dist
