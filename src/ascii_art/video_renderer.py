@@ -8,7 +8,13 @@ import numpy as np
 from PIL import Image
 
 from . import charset as charset_mod
-from . import converter, image_resize, ui
+from . import image_resize, ui
+
+# Import Rust renderer
+try:
+    from .ascii_art_rs import render_frame_to_string
+except ImportError:
+    render_frame_to_string = None
 
 
 def play_video(filepath, args):
@@ -28,17 +34,15 @@ def play_video(filepath, args):
     frame_delay = 1.0 / fps
 
     # 3. Setup Logic (Dimensions & Charset)
-    # We read the first frame to calculate dimensions ONCE.
     ret, first_frame = cap.read()
     if not ret:
         print("❌ Error: Video is empty or unreadable.")
         return
 
-    # Convert first frame to PIL for the resize logic
     first_frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(first_frame_rgb)
 
-    # Determine Dimensions using existing logic
+    # Determine Dimensions
     target_w, target_h = None, None
     if args.width or args.height:
         try:
@@ -61,9 +65,16 @@ def play_video(filepath, args):
 
     # Determine Charset
     try:
-        chars = charset_mod.get_charset(args.charset)
+        chars_str = charset_mod.get_charset(args.charset)
+        # Rust requires a List[str], not a single str
+        chars_list = list(chars_str)
     except ValueError as e:
         print(f"Error: {e}")
+        return
+
+    # Check for Rust support
+    if args.color and render_frame_to_string is None:
+        print("❌ Error: Rust extension not found. Build with 'maturin develop'.")
         return
 
     # Clear screen ONCE before starting
@@ -73,53 +84,43 @@ def play_video(filepath, args):
         while True:
             start_time = time.time()
 
-            # READ FRAME
-            # If we are at the very first frame, we already read it.
-            # However, for simplicity of the loop, we'll re-process the first frame logic
-            # or just continue. Let's reset pointer to 0 to be clean.
-            # (Or just continue reading if we didn't consume it fully yet).
-            # To avoid complexity, we just continue reading.
-            # If we want to include the first frame, we'd need a flag, but missing 1 frame is fine.
             ret, frame = cap.read()
             if not ret:
                 break  # End of video
 
-            # PROCESS FRAME
-            # OpenCV is BGR, PIL is RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_frame = Image.fromarray(frame_rgb)
+            # Resize Frame (OpenCV is faster than PIL here, stay in CV2/NumPy land)
+            # OpenCV expects (width, height)
+            frame_resized = cv2.resize(
+                frame, (target_w, target_h), interpolation=cv2.INTER_AREA
+            )
 
-            # Resize
-            img_resized = image_resize.resize_image(pil_frame, target_w, target_h)
-
-            # Convert to ASCII
-            if args.color:
-                ascii_grid = converter.image_to_ascii_with_color(img_resized, chars)
-            else:
-                ascii_grid = converter.image_to_ascii(img_resized, chars)
+            # Convert BGR (OpenCV) to RGB (Standard)
+            # We pass this numpy array directly to Rust
+            frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 
             # RENDER FRAME
-            # Move cursor to top-left to overwrite previous frame
             ui.move_cursor_home()
 
-            output_buffer = []
-            for row in ascii_grid:
-                row_parts = []
-                for item in row:
-                    if isinstance(item, tuple):
-                        char, (r, g, b) = item
-                        # Color logic
-                        display_str = char + "."  # Aspect ratio fix
-                        row_parts.append(
-                            ui.get_ansi_colored_string(display_str, r, g, b)
-                        )
-                    else:
-                        char = item
-                        row_parts.append(char + " ")  # Aspect ratio fix
-                output_buffer.append("".join(row_parts))
+            if args.color:
+                # --- NEW RUST PATH ---
+                # Returns one giant string with all ANSI codes
+                output_str = render_frame_to_string(frame_rgb, chars_list)
+                sys.stdout.write(output_str)
+            else:
+                # --- LEGACY GRAYSCALE PATH (Keep Python/NumPy) ---
+                # Since we optimized COLOR, let's rely on the old converter for grayscale
+                pil_frame = Image.fromarray(frame_rgb)
+                from . import converter
 
-            # Print the entire frame at once to minimize tearing
-            sys.stdout.write("\n".join(output_buffer))
+                ascii_grid = converter.image_to_ascii(pil_frame, chars_str)
+
+                output_buffer = []
+                for row in ascii_grid:
+                    # Grayscale aspect ratio fix
+                    row_parts = [char + " " for char in row]
+                    output_buffer.append("".join(row_parts))
+                sys.stdout.write("\n".join(output_buffer))
+
             sys.stdout.flush()
 
             # TIMING CONTROL
@@ -128,7 +129,6 @@ def play_video(filepath, args):
             time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        # Clean exit on Ctrl+C
         ui.clear_terminal()
         print("\nStopped.")
     finally:
