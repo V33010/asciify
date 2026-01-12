@@ -2,12 +2,15 @@
 
 ![PyPI - Version](https://img.shields.io/pypi/v/asciify-term?style=flat-square&color=blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue?style=flat-square)
+![Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/asciify-term?style=flat-square)
 
-**Asciify Term** is a modern, cross-platform CLI utility that renders high-resolution images as ASCII art directly in your terminal.
+**Asciify Term** is a modern, cross-platform CLI utility that renders high-resolution images and videos as ASCII art directly in your terminal.
 
 Originally built as a creative toy, it has evolved into a powerful **DevOps utility** for verifying image assets in headless environments (SSH, Docker, WSL) where GUI viewers are unavailable. It supports local files, remote URLs, and TrueColor rendering.
+
+New in v0.5.0: The core rendering engine has been rewritten in Rust, delivering fast performance, memory efficiency, and smooth 30FPS+ video playback.
 
 ## 🚀 Features
 
@@ -18,10 +21,12 @@ Originally built as a creative toy, it has evolved into a powerful **DevOps util
 - **Smart Resizing:** Automatically fits the output to your current terminal window dimensions.
 - **Export Options:** Save outputs as plain text .txt or color-preserving .html.
 - **Legacy Interactive Mode:** A guided menu system for creative exploration.
+- **Video Support**: Play MP4, MOV, and AVI files directly in your terminal.
+- **Rust-Powered**: High-performance rendering engine optimized for smooth playback and low memory usage.
 
 ## Installation
 
-Install directly from PyPI:
+Install directly from PyPI (recommended):
 
 ```sh
 pip install asciify-term
@@ -108,6 +113,14 @@ asciify --set-charset blocks
 # All future runs will now use 'blocks' by default
 ```
 
+### 6. Video Playback
+
+```sh 
+# Play video in color
+asciify -i my_video.mp4 --color
+```
+*Note: Saving output to file is disabled for video sources.*
+
 
 ## Advanced: Interactive Mode
 
@@ -121,9 +134,9 @@ asciify --full
 
 | Flag | Description |
 | :--- | :--- |
-| -i, --input-file | Path to local image OR URL (http://...). |
+| -i, --input-file | Path to local image/video OR URL (http://...). |
 | --color | Enable TrueColor ANSI output. |
-| -s, --save | Save output to current directory. |
+| -s, --save | Save output to current directory (images only). |
 | --output-folder | Specify folder for saved output. |
 | --output-file-name | Specify filename (without extension). |
 | --html | Save as .html file. |
