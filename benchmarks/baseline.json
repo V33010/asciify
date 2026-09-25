@@ -1,0 +1,98 @@
+{
+  "format_version": 1,
+  "created_with": "asciify benchmark_speed.py",
+  "config": {
+    "runs": 20,
+    "warmups": 3,
+    "width": 160,
+    "video_width": 100,
+    "frames": 120,
+    "mode": "all",
+    "charset": "default"
+  },
+  "results": {
+    "Image / grayscale": {
+      "name": "Image / grayscale",
+      "unit": "image",
+      "metadata": {
+        "source": "/home/v33010/projects/asciify/assets/input/sample-image.jpg",
+        "input_size": "400x300",
+        "output_size": "160x120",
+        "charset_length": 13,
+        "mode": "grayscale"
+      },
+      "total_median_ms": 4.21875,
+      "total_mean_ms": 4.2646212,
+      "stages_median_ms": {
+        "load image": 0.7728524999999999,
+        "resize": 1.23731,
+        "ASCII conversion": 1.3023905,
+        "format output": 0.907643
+      }
+    },
+    "Image / color": {
+      "name": "Image / color",
+      "unit": "image",
+      "metadata": {
+        "source": "/home/v33010/projects/asciify/assets/input/sample-image.jpg",
+        "input_size": "400x300",
+        "output_size": "160x120",
+        "charset_length": 13,
+        "mode": "color",
+        "renderer": "Rust conversion + Python ANSI formatting"
+      },
+      "total_median_ms": 9.794140500000001,
+      "total_mean_ms": 9.85563625,
+      "stages_median_ms": {
+        "load image": 0.9416025,
+        "resize": 1.250153,
+        "Rust conversion": 2.4466375,
+        "ANSI formatting": 5.094666
+      }
+    },
+    "Video / grayscale": {
+      "name": "Video / grayscale",
+      "unit": "frame batch",
+      "metadata": {
+        "source": "/home/v33010/projects/asciify/assets/input/sample-video.mp4",
+        "source_size": "1920x1080",
+        "source_fps": 29.97,
+        "frames_requested_per_run": 120,
+        "render_width": 100,
+        "mode": "grayscale",
+        "renderer": "Python/NumPy"
+      },
+      "total_median_ms": 900.9617984999999,
+      "total_mean_ms": 906.4803492000001,
+      "stages_median_ms": {
+        "open video": 4.937957000000001,
+        "decode": 195.31074100000006,
+        "resize": 599.0719210000002,
+        "BGR -> RGB": 1.4511919999999998,
+        "render": 101.73582549999999
+      }
+    },
+    "Video / color": {
+      "name": "Video / color",
+      "unit": "frame batch",
+      "metadata": {
+        "source": "/home/v33010/projects/asciify/assets/input/sample-video.mp4",
+        "source_size": "1920x1080",
+        "source_fps": 29.97,
+        "frames_requested_per_run": 120,
+        "render_width": 100,
+        "mode": "color",
+        "renderer": "Rust string renderer"
+      },
+      "total_median_ms": 867.3305015000001,
+      "total_mean_ms": 873.81387875,
+      "stages_median_ms": {
+        "open video": 4.9230305,
+        "decode": 196.83798399999998,
+        "resize": 619.231593,
+        "BGR -> RGB": 1.5629514999999996,
+        "render": 43.870986000000016
+      }
+    }
+  }
+}

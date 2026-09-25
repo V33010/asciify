@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+
+def load_rust_module():
+    return pytest.importorskip(
+        "ascii_art.ascii_art_rs", reason="Rust extension not built"
+    )
+
+
+def test_image_to_ascii_rs_matches_python_grayscale_mapping_and_preserves_rgb():
+    rust = load_rust_module()
+    arr = np.array(
+        [
+            [[0, 0, 0], [10, 20, 30]],
+            [[200, 50, 1], [255, 255, 255]],
+        ],
+        dtype=np.uint8,
+    )
+    chars = ["0", "1", "2", "3"]
+
+    result = rust.image_to_ascii_rs(arr, chars)
+
+    assert result[0][0] == ("0", (0, 0, 0))
+    assert result[0][1] == ("0", (10, 20, 30))
+    assert result[1][0] == ("2", (200, 50, 1))
+    assert result[1][1] == ("3", (255, 255, 255))
+
+
+def test_render_frame_to_string_produces_ansi_for_every_pixel():
+    rust = load_rust_module()
+    arr = np.array([[[1, 2, 3], [255, 0, 0]]], dtype=np.uint8)
+    output = rust.render_frame_to_string(arr, ["0", "1"])
+
+    assert output.count("\033[38;2;") == 2
+    assert "\033[38;2;1;2;3m0.\033[0m" in output
+    assert "\033[38;2;255;0;0m1.\033[0m" in output
+    assert output.endswith("\n")
+
+
+def test_rust_frame_renderer_matches_color_grid_pixel_data():
+    rust = load_rust_module()
+    arr = np.array([[[0, 10, 20], [20, 10, 0]]], dtype=np.uint8)
+    chars = [" ", "#", "@"]
+
+    grid = rust.image_to_ascii_rs(arr, chars)
+    rendered = rust.render_frame_to_string(arr, chars)
+
+    assert grid[0][0][1] == (0, 10, 20)
+    assert grid[0][1][1] == (20, 10, 0)
+    assert rendered.count("\033[38;2;") == 2

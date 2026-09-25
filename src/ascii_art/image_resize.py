@@ -85,10 +85,10 @@ def get_auto_terminal_dimensions(img):
     # to correct aspect ratio. Therefore, our "logical max width" is
     # half the physical terminal width.
     # We subtract 2 extra columns for safety (avoid edge-case wrapping).
-    max_w = (term_w // 2) - 2
+    max_w = max(1, (term_w // 2) - 2)
 
     # We remove 1 line from height to leave room for the cursor/prompt at the bottom
-    max_h = term_h - 1
+    max_h = max(1, term_h - 1)
 
     iw, ih = img.size
 

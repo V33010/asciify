@@ -96,12 +96,18 @@ def download_image(url):
             if not filename or "." not in filename:
                 # Try to guess extension from content-type
                 ext = ".jpg"  # default
-                if content_type == "image/png":
+                if mime_type == "image/png":
                     ext = ".png"
-                elif content_type == "image/webp":
+                elif mime_type == "image/webp":
                     ext = ".webp"
-                elif content_type == "image/gif":
+                elif mime_type == "image/gif":
                     ext = ".gif"
+                elif mime_type == "image/bmp":
+                    ext = ".bmp"
+                elif mime_type == "image/tiff":
+                    ext = ".tiff"
+                elif mime_type == "image/x-icon":
+                    ext = ".ico"
 
                 filename = f"downloaded_image{ext}"
 

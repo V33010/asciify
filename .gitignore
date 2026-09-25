@@ -66,6 +66,7 @@ logs/
 *.jpeg
 *.gif
 *.Identifier
+!assets/input/sample-image.jpg
 
 # --- CRITICAL FIX START ---
 # 1. Ignore actual output files, but NOT all .txt files

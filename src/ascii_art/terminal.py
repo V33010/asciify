@@ -115,7 +115,7 @@ def run_terminal_pipeline(args):
             print(f"Error: {e}")
             sys.exit(1)
 
-    elif args.downsize:
+    elif args.downsize is not None:
         try:
             factor = float(args.downsize)
             if factor <= 0:
