@@ -137,3 +137,12 @@ yarn-error.log*
 # =========================
 .cache/
 .cache/**
+
+# Rust build artifacts
+target/
+
+# Local benchmark data
+benchmarks/baseline.json
+
+# Generated benchmark output
+assets/output/benchmark_image_output.txt
