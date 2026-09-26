@@ -64,6 +64,49 @@ def test_empty_charset_is_rejected_before_indexing():
         converter.image_to_ascii(img, "")
 
 
+def test_render_image_to_string_requires_rust_extension(monkeypatch):
+    img = Image.new("RGB", (1, 1), (1, 2, 3))
+    monkeypatch.setattr(converter, "render_frame_to_string", None)
+
+    with pytest.raises(ImportError, match="Rust extension"):
+        converter.render_image_to_string(img, "01")
+
+
+def test_render_image_to_string_sends_rgb_array_and_charset_list(monkeypatch):
+    calls = {}
+
+    def fake_renderer(arr, chars):
+        calls["array"] = arr
+        calls["charset"] = chars
+        return "\033[38;2;1;2;3m0.\033[0m\n"
+
+    monkeypatch.setattr(converter, "render_frame_to_string", fake_renderer)
+    img = Image.new("RGBA", (1, 1), (1, 2, 3, 99))
+
+    result = converter.render_image_to_string(img, "01")
+
+    assert result == "\033[38;2;1;2;3m0.\033[0m\n"
+    assert calls["array"].shape == (1, 1, 3)
+    assert calls["array"].dtype == np.uint8
+    assert calls["array"][0, 0].tolist() == [1, 2, 3]
+    assert calls["charset"] == ["0", "1"]
+
+
+def test_render_image_to_string_reuses_rgb_image_without_reconversion(monkeypatch):
+    calls = {}
+
+    def fake_renderer(arr, chars):
+        calls["array"] = arr
+        return ""
+
+    monkeypatch.setattr(converter, "render_frame_to_string", fake_renderer)
+    img = Image.new("RGB", (1, 1), (4, 5, 6))
+
+    converter.render_image_to_string(img, "01")
+
+    assert calls["array"][0, 0].tolist() == [4, 5, 6]
+
+
 def test_color_converter_requires_rust_extension(monkeypatch):
     img = Image.new("RGB", (1, 1), (1, 2, 3))
     monkeypatch.setattr(converter, "image_to_ascii_rs", None)

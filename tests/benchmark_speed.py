@@ -281,15 +281,6 @@ def format_grayscale_grid(ascii_grid: list[list[str]]) -> str:
     ) + "\n"
 
 
-def format_color_grid(ascii_grid: list[list[tuple[str, tuple[int, int, int]]]]) -> str:
-    parts: list[str] = []
-    for row in ascii_grid:
-        for char, (r, g, b) in row:
-            parts.append(ui.get_ansi_colored_string(char + ".", r, g, b))
-        parts.append("\n")
-    return "".join(parts)
-
-
 def make_image_gray_run(
     image_path: Path | None,
     target_w: int,
@@ -323,7 +314,7 @@ def make_image_color_run(
     target_h: int,
     charset: str,
 ) -> StageRun:
-    if converter.image_to_ascii_rs is None:
+    if converter.render_frame_to_string is None:
         raise RuntimeError("Rust extension is required for the color benchmark")
 
     stages: dict[str, float] = {}
@@ -337,12 +328,8 @@ def make_image_color_run(
     stages["resize"] = ms(time.perf_counter_ns() - start)
 
     start = time.perf_counter_ns()
-    ascii_grid = converter.image_to_ascii_with_color(resized, charset)
-    stages["Rust conversion"] = ms(time.perf_counter_ns() - start)
-
-    start = time.perf_counter_ns()
-    format_color_grid(ascii_grid)
-    stages["ANSI formatting"] = ms(time.perf_counter_ns() - start)
+    converter.render_image_to_string(resized, charset)
+    stages["Rust ANSI rendering"] = ms(time.perf_counter_ns() - start)
 
     return StageRun(stages)
 
@@ -385,7 +372,7 @@ def run_image_benchmark(
         )
 
     if args.mode in {"all", "color"}:
-        if converter.image_to_ascii_rs is not None:
+        if converter.render_frame_to_string is not None:
             runs = run_repeated(
                 lambda: make_image_color_run(
                     image_path,
@@ -407,7 +394,7 @@ def run_image_benchmark(
                         "output_size": f"{target_w}x{target_h}",
                         "charset_length": len(charset),
                         "mode": "color",
-                        "renderer": "Rust conversion + Python ANSI formatting",
+                        "renderer": "Rust direct ANSI string rendering",
                     },
                 )
             )
@@ -865,10 +852,7 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    rust_available = (
-        converter.image_to_ascii_rs is not None
-        and video_renderer.render_frame_to_string is not None
-    )
+    rust_available = converter.render_frame_to_string is not None
 
     print()
     print(LINE)
@@ -937,6 +921,7 @@ def main() -> int:
     print("Use the same machine, assets, dimensions, charset, and run count.")
     print("The bottleneck is the stage consuming the largest share of total time.")
     print("Grayscale video does not perform BGR -> RGB because its conversion is channel-order independent.")
+    print("Color image output renders directly to one ANSI string in Rust; Python ANSI formatting is excluded.")
     print("Video total excludes terminal writes and real-time playback sleeping.")
     print(LINE)
 

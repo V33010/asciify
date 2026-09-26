@@ -3,9 +3,10 @@ import numpy as np
 
 # Try to import the Rust extension.
 try:
-    from .ascii_art_rs import image_to_ascii_rs
+    from .ascii_art_rs import image_to_ascii_rs, render_frame_to_string
 except ImportError:
     image_to_ascii_rs = None
+    render_frame_to_string = None
 
 
 def image_to_ascii(img, charset):
@@ -29,6 +30,24 @@ def image_to_ascii(img, charset):
         ascii_grid.append(ascii_row)
 
     return ascii_grid
+
+
+def render_image_to_string(img, charset):
+    """Render a color PIL image directly to one ANSI string in Rust.
+
+    The terminal color path does not need the intermediate
+    ``[(character, (r, g, b)), ...]`` Python grid, so send the RGB pixel
+    array straight to Rust, which builds the complete TrueColor ANSI output
+    string in one pass.
+    """
+    if render_frame_to_string is None:
+        raise ImportError(
+            "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
+        )
+
+    img_rgb = img if img.mode == "RGB" else img.convert("RGB")
+    arr = np.asarray(img_rgb)
+    return render_frame_to_string(arr, list(charset))
 
 
 def image_to_ascii_with_color(img, charset):

@@ -79,21 +79,83 @@ def test_terminal_pipeline_renders_grayscale_and_saves_text(tmp_path, capsys):
     assert result.read_text(encoding="utf-8") == "1 1 \n"
 
 
-def test_terminal_pipeline_calls_color_converter_and_writer(
+def test_terminal_pipeline_renders_color_directly_with_rust(monkeypatch, tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (1, 1), (1, 2, 3)).save(image_path)
+    calls = {}
+
+    def fake_render(img, chars):
+        calls["rendered"] = (img.size, chars)
+        return "\033[38;2;1;2;3mX.\033[0m\n"
+
+    def unexpected_color_grid(*args, **kwargs):
+        raise AssertionError("color terminal output should not build a Python color grid")
+
+    monkeypatch.setattr(terminal.converter, "render_image_to_string", fake_render)
+    monkeypatch.setattr(
+        terminal.converter, "image_to_ascii_with_color", unexpected_color_grid
+    )
+    monkeypatch.setattr(
+        terminal.ui, "get_ansi_colored_string", unexpected_color_grid
+    )
+
+    terminal.run_terminal_pipeline(
+        make_args(
+            input_file=str(image_path),
+            width=1,
+            height=1,
+            charset="01",
+            color=True,
+        )
+    )
+
+    assert calls["rendered"] == ((1, 1), "01")
+    assert capsys.readouterr().out == "\033[38;2;1;2;3mX.\033[0m\n"
+
+
+def test_terminal_pipeline_color_reports_missing_rust_renderer(
+    monkeypatch, tmp_path, capsys
+):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (1, 1), (1, 2, 3)).save(image_path)
+
+    def missing_rust_renderer(*args, **kwargs):
+        raise ImportError("Rust extension 'ascii_art_rs' not found")
+
+    monkeypatch.setattr(terminal.converter, "render_image_to_string", missing_rust_renderer)
+
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(
+                input_file=str(image_path),
+                width=1,
+                height=1,
+                charset="01",
+                color=True,
+            )
+        )
+
+    assert exc.value.code == 1
+    assert "Rust extension" in capsys.readouterr().out
+
+
+def test_terminal_pipeline_color_still_builds_grid_when_saving(
     monkeypatch, tmp_path, capsys
 ):
     image_path = tmp_path / "image.png"
     Image.new("RGB", (1, 1), (1, 2, 3)).save(image_path)
     calls = {}
 
-    def fake_color_converter(img, chars):
-        calls["converted"] = (img.size, chars)
-        return [[("X", (1, 2, 3))]]
-
     monkeypatch.setattr(
-        terminal.converter, "image_to_ascii_with_color", fake_color_converter
+        terminal.converter,
+        "render_image_to_string",
+        lambda img, chars: "RUST\n",
     )
-    # Avoid depending on writer implementation here; this test targets terminal orchestration.
+    monkeypatch.setattr(
+        terminal.converter,
+        "image_to_ascii_with_color",
+        lambda img, chars: [[("X", (1, 2, 3))]],
+    )
     monkeypatch.setattr(
         terminal.writer,
         "save_art",
@@ -113,10 +175,9 @@ def test_terminal_pipeline_calls_color_converter_and_writer(
         )
     )
 
-    assert calls["converted"] == ((1, 1), "01")
+    assert calls["saved"][0][0] == [[("X", (1, 2, 3))]]
     assert calls["saved"][1]["as_html"] is False
-    captured = capsys.readouterr().out
-    assert "X." in captured or "\033[38;2;1;2;3m" in captured
+    assert capsys.readouterr().out == "RUST\n"
 
 
 def test_terminal_pipeline_rejects_video_save_flags(monkeypatch, tmp_path, capsys):

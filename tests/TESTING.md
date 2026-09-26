@@ -95,7 +95,7 @@ python tests/benchmark_speed.py --video-only --runs 10 --warmups 2 --frames 60
 Color video/Rust path:
 
 ```bash
-python tests/benchmark_speed.py --video-only --video-color --runs 10 --warmups 2 --frames 60
+python tests/benchmark_speed.py --video-only --color-only --runs 10 --warmups 2 --frames 60
 ```
 
-The benchmark deliberately excludes terminal writes and real-time `sleep()` from the processing timing, because those would dominate the numbers and make optimization comparisons misleading. It separately measures image loading, resize, RGB conversion, ASCII rendering, formatting, file writing, video decoding, and per-frame throughput, and reports the longest median stage.
+The color image benchmark now uses the production direct-Rust ANSI renderer, so it no longer measures Python per-character ANSI formatting. Color video already uses the same direct-Rust string renderer. The benchmark deliberately excludes terminal writes and real-time `sleep()` from the processing timing, because those would dominate the numbers and make optimization comparisons misleading. It separately measures image loading, resize, ASCII conversion/rendering, video decoding, BGR-to-RGB conversion where required, and per-frame throughput, and reports the longest median stage.
