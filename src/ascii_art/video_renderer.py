@@ -104,10 +104,10 @@ def play_video(filepath, args):
         while True:
             start_time = time.time()
 
-            frame_resized = cv2.resize(
+            frame_resized = image_resize.resize_video_frame(
                 frame,
-                (target_w, target_h),
-                interpolation=cv2.INTER_AREA,
+                target_w,
+                target_h,
             )
 
             frame_rgb = cv2.cvtColor(

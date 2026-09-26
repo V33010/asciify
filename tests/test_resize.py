@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -46,6 +47,27 @@ def test_calculate_dimensions_returns_none_pair_when_no_constraints(img):
 def test_resize_image_changes_dimensions(img):
     resized = image_resize.resize_image(img, 37, 19)
     assert resized.size == (37, 19)
+
+
+def test_resize_video_frame_uses_linear_interpolation(monkeypatch):
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    captured = {}
+    sentinel = np.empty((56, 100, 3), dtype=np.uint8)
+
+    def fake_resize(source, size, interpolation):
+        captured["source"] = source
+        captured["size"] = size
+        captured["interpolation"] = interpolation
+        return sentinel
+
+    monkeypatch.setattr(image_resize.cv2, "resize", fake_resize)
+
+    result = image_resize.resize_video_frame(frame, 100, 56)
+
+    assert result is sentinel
+    assert captured["source"] is frame
+    assert captured["size"] == (100, 56)
+    assert captured["interpolation"] == image_resize.cv2.INTER_LINEAR
 
 
 def test_interactive_downsize_rejects_non_numeric_input_then_accepts(

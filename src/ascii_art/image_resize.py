@@ -1,6 +1,7 @@
 # src/ascii_art/image_resize.py
 import shutil
 
+import cv2
 from PIL import Image
 
 from .ui import cool_print
@@ -33,6 +34,21 @@ def calculate_dimensions(img, target_w=None, target_h=None, ratio=None):
 
 def resize_image(img, width, height):
     return img.resize((width, height), Image.Resampling.LANCZOS)
+
+
+def resize_video_frame(frame, width, height):
+    """Resize a decoded OpenCV video frame for terminal rendering.
+
+    Video playback prioritizes throughput over photographic downsampling
+    quality. INTER_LINEAR is substantially faster than INTER_AREA for the
+    large reductions typical of terminal output (for example, 1920x1080
+    down to roughly 100x56).
+    """
+    return cv2.resize(
+        frame,
+        (width, height),
+        interpolation=cv2.INTER_LINEAR,
+    )
 
 
 def interactive_downsize_factor(img, bypass_downsizing=False):

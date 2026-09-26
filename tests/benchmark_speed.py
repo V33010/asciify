@@ -472,10 +472,10 @@ def make_video_run(
                 1,
                 int(round(width * height / source_width)),
             )
-            frame_resized = cv2.resize(
+            frame_resized = image_resize.resize_video_frame(
                 frame,
-                (width, target_height),
-                interpolation=cv2.INTER_AREA,
+                width,
+                target_height,
             )
             stages["resize"] += ms(time.perf_counter_ns() - start)
 
@@ -559,6 +559,7 @@ def run_video_benchmark(
                     "source_fps": round(source_fps, 3) if source_fps > 0 else None,
                     "frames_requested_per_run": args.frames,
                     "render_width": args.video_width,
+                    "resize_interpolation": "INTER_LINEAR",
                     "mode": mode,
                     "renderer": (
                         "Python/NumPy"
