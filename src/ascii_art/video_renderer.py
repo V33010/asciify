@@ -12,9 +12,10 @@ from . import image_resize, ui
 
 # Import Rust renderer
 try:
-    from .ascii_art_rs import render_frame_to_string
+    from .ascii_art_rs import render_frame_to_string, render_grayscale_to_string
 except ImportError:
     render_frame_to_string = None
+    render_grayscale_to_string = None
 
 
 def play_video(filepath, args):
@@ -139,7 +140,18 @@ def play_video(filepath, args):
                 )
                 sys.stdout.write(output_str)
 
+            elif render_grayscale_to_string is not None:
+                # Rust performs both grayscale character mapping and terminal
+                # formatting directly from the resized OpenCV BGR frame.
+                output_str = render_grayscale_to_string(
+                    frame_for_render,
+                    chars_list,
+                )
+                sys.stdout.write(output_str)
+
             else:
+                # Python fallback for source checkouts without the optional
+                # Rust extension.
                 pil_frame = Image.fromarray(frame_for_render)
 
                 from . import converter

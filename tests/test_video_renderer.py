@@ -150,6 +150,38 @@ def test_play_video_color_uses_rust_renderer_when_available(monkeypatch, capsys)
     assert cap.released is True
 
 
+def test_play_video_grayscale_uses_rust_renderer_when_available(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(20)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "move_cursor_home", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+
+    calls = []
+    monkeypatch.setattr(
+        video_renderer,
+        "render_grayscale_to_string",
+        lambda arr, charset: calls.append((arr.copy(), charset)) or "RUSTGRAY\n",
+    )
+
+    def unexpected_python_conversion(*args, **kwargs):
+        raise AssertionError("grayscale video should use the Rust renderer when available")
+
+    monkeypatch.setattr(
+        "ascii_art.converter.image_to_ascii",
+        unexpected_python_conversion,
+    )
+
+    video_renderer.play_video("video.mp4", make_args(color=False))
+    output = capsys.readouterr().out
+
+    assert output.count("RUSTGRAY") == 2
+    assert len(calls) == 2
+    assert calls[0][0].shape == (1, 2, 3)
+    assert calls[0][1] == ["0", "1"]
+    assert cap.released is True
+
+
 def test_play_video_grayscale_skips_bgr_to_rgb_conversion(monkeypatch, capsys):
     cap = FakeCapture([make_frame(10), make_frame(20)])
     monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
@@ -173,15 +205,13 @@ def test_play_video_grayscale_skips_bgr_to_rgb_conversion(monkeypatch, capsys):
 
 
 def test_play_video_handles_keyboard_interrupt(monkeypatch, capsys):
-    import ascii_art.converter as converter
-
     cap = FakeCapture([make_frame(10), make_frame(20)])
     monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
     monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: print("CLEAR"))
     monkeypatch.setattr(video_renderer.ui, "move_cursor_home", lambda: None)
     monkeypatch.setattr(
-        converter,
-        "image_to_ascii",
+        video_renderer,
+        "render_grayscale_to_string",
         lambda *args: (_ for _ in ()).throw(KeyboardInterrupt),
     )
 
@@ -199,10 +229,10 @@ def test_play_video_should_render_first_decoded_frame(monkeypatch):
     monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
 
     seen = []
-    import ascii_art.converter as converter
-
     monkeypatch.setattr(
-        converter, "image_to_ascii", lambda img, chars: seen.append(img) or [["0"]]
+        video_renderer,
+        "render_grayscale_to_string",
+        lambda frame, chars: seen.append(frame.copy()) or "0 \n",
     )
 
     video_renderer.play_video("video.mp4", make_args())

@@ -79,6 +79,35 @@ def test_terminal_pipeline_renders_grayscale_and_saves_text(tmp_path, capsys):
     assert result.read_text(encoding="utf-8") == "1 1 \n"
 
 
+def test_terminal_pipeline_renders_grayscale_directly_with_rust(monkeypatch, tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (1, 1), (1, 2, 3)).save(image_path)
+    calls = {}
+
+    def fake_render(img, chars):
+        calls["rendered"] = (img.size, chars)
+        return "0 \n"
+
+    def unexpected_python_conversion(*args, **kwargs):
+        raise AssertionError("grayscale terminal output should not build a Python ASCII grid")
+
+    monkeypatch.setattr(terminal.converter, "render_grayscale_image_to_string", fake_render)
+    monkeypatch.setattr(terminal.converter, "image_to_ascii", unexpected_python_conversion)
+
+    terminal.run_terminal_pipeline(
+        make_args(
+            input_file=str(image_path),
+            width=1,
+            height=1,
+            charset="01",
+            color=False,
+        )
+    )
+
+    assert calls["rendered"] == ((1, 1), "01")
+    assert capsys.readouterr().out == "0 \n"
+
+
 def test_terminal_pipeline_renders_color_directly_with_rust(monkeypatch, tmp_path, capsys):
     image_path = tmp_path / "image.png"
     Image.new("RGB", (1, 1), (1, 2, 3)).save(image_path)

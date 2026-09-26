@@ -40,6 +40,39 @@ def test_render_frame_to_string_produces_ansi_for_every_pixel():
     assert output.endswith("\n")
 
 
+def test_grayscale_rust_renderer_matches_python_mapping_and_formatting():
+    rust = load_rust_module()
+    arr = np.array(
+        [
+            [[0, 0, 0], [10, 20, 30]],
+            [[200, 50, 1], [255, 255, 255]],
+        ],
+        dtype=np.uint8,
+    )
+
+    output = rust.render_grayscale_to_string(arr, ["0", "1", "2", "3"])
+
+    assert output == "0 0 \n2 3 \n"
+
+
+def test_grayscale_rust_renderer_is_channel_order_invariant():
+    rust = load_rust_module()
+    bgr = np.array([[[10, 20, 30], [200, 50, 1]]], dtype=np.uint8)
+    rgb = bgr[:, :, ::-1].copy()
+
+    assert rust.render_grayscale_to_string(bgr, ["0", "1", "2", "3"]) == rust.render_grayscale_to_string(
+        rgb, ["0", "1", "2", "3"]
+    )
+
+
+def test_grayscale_rust_renderer_rejects_empty_charset():
+    rust = load_rust_module()
+    arr = np.zeros((1, 1, 3), dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="non-empty"):
+        rust.render_grayscale_to_string(arr, [])
+
+
 def test_rust_frame_renderer_matches_color_grid_pixel_data():
     rust = load_rust_module()
     arr = np.array([[[0, 10, 20], [20, 10, 0]]], dtype=np.uint8)

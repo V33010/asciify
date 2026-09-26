@@ -143,10 +143,10 @@ def run_terminal_pipeline(args):
     should_save = any([args.save, args.output_folder, args.output_file_name, args.html])
 
     # --- 9. CONVERSION + OUTPUT TO TERMINAL ---
-    # Color terminal output is rendered directly by Rust into one ANSI string.
-    # This avoids allocating a Python color grid and then formatting every
-    # character through Python's ANSI helper. A color grid is still generated
-    # separately when a save operation needs structured character/RGB data.
+    # Terminal rendering now uses Rust for both color and grayscale when the
+    # extension is available, avoiding Python per-character formatting and
+    # Python per-pixel ASCII conversion. Save operations still build the
+    # structured Python grid separately because writer.py consumes that format.
     ascii_grid = None
 
     if args.color:
@@ -161,10 +161,23 @@ def run_terminal_pipeline(args):
         if should_save:
             ascii_grid = converter.image_to_ascii_with_color(img_resized, chars)
     else:
-        ascii_grid = converter.image_to_ascii(img_resized, chars)
-        for row in ascii_grid:
-            line_parts = [char + " " for char in row]
-            sys.stdout.write("".join(line_parts) + "\n")
+        try:
+            output_str = converter.render_grayscale_image_to_string(
+                img_resized,
+                chars,
+            )
+        except ImportError:
+            # Keep grayscale terminal output working in Python-only source
+            # checkouts where the optional Rust extension is not built.
+            ascii_grid = converter.image_to_ascii(img_resized, chars)
+            for row in ascii_grid:
+                line_parts = [char + " " for char in row]
+                sys.stdout.write("".join(line_parts) + "\n")
+        else:
+            sys.stdout.write(output_str)
+
+            if should_save:
+                ascii_grid = converter.image_to_ascii(img_resized, chars)
 
     # --- 10. SAVE TO FILE (Optional) ---
     if should_save:

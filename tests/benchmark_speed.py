@@ -298,12 +298,16 @@ def make_image_gray_run(
     stages["resize"] = ms(time.perf_counter_ns() - start)
 
     start = time.perf_counter_ns()
-    ascii_grid = converter.image_to_ascii(resized, charset)
-    stages["ASCII conversion"] = ms(time.perf_counter_ns() - start)
+    if converter.render_grayscale_to_string is not None:
+        converter.render_grayscale_image_to_string(resized, charset)
+        stages["Rust ASCII rendering"] = ms(time.perf_counter_ns() - start)
+    else:
+        ascii_grid = converter.image_to_ascii(resized, charset)
+        stages["ASCII conversion"] = ms(time.perf_counter_ns() - start)
 
-    start = time.perf_counter_ns()
-    format_grayscale_grid(ascii_grid)
-    stages["format output"] = ms(time.perf_counter_ns() - start)
+        start = time.perf_counter_ns()
+        format_grayscale_grid(ascii_grid)
+        stages["format output"] = ms(time.perf_counter_ns() - start)
 
     return StageRun(stages)
 
@@ -407,8 +411,11 @@ def run_image_benchmark(
 # ---------------------------------------------------------------------------
 
 
-def render_grayscale_frame(frame_rgb: np.ndarray, charset: str) -> str:
-    image = Image.fromarray(frame_rgb)
+def render_grayscale_frame(frame: np.ndarray, charset: str) -> str:
+    if video_renderer.render_grayscale_to_string is not None:
+        return video_renderer.render_grayscale_to_string(frame, list(charset))
+
+    image = Image.fromarray(frame)
     ascii_grid = converter.image_to_ascii(image, charset)
     return format_grayscale_grid(ascii_grid)
 
@@ -451,7 +458,9 @@ def make_video_run(
                 "open video": open_ms,
                 "decode": 0.0,
                 "resize": 0.0,
-                "render": 0.0,
+                "Rust ASCII rendering"
+                if video_renderer.render_grayscale_to_string is not None
+                else "render": 0.0,
             }
 
         frames = 0
@@ -489,9 +498,14 @@ def make_video_run(
                 render_color_frame(frame_rgb, charset)
                 stages["render"] += ms(time.perf_counter_ns() - start)
             else:
+                render_stage = (
+                    "Rust ASCII rendering"
+                    if video_renderer.render_grayscale_to_string is not None
+                    else "render"
+                )
                 start = time.perf_counter_ns()
                 render_grayscale_frame(frame_resized, charset)
-                stages["render"] += ms(time.perf_counter_ns() - start)
+                stages[render_stage] += ms(time.perf_counter_ns() - start)
 
             frames += 1
 
@@ -565,7 +579,9 @@ def run_video_benchmark(
                     "resize_interpolation": "INTER_LINEAR",
                     "mode": mode,
                     "renderer": (
-                        "Python/NumPy"
+                        "Rust grayscale ASCII string renderer"
+                        if not color and video_renderer.render_grayscale_to_string is not None
+                        else "Python/NumPy"
                         if not color
                         else "Rust string renderer"
                     ),
@@ -852,7 +868,8 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    rust_available = converter.render_frame_to_string is not None
+    rust_color_available = converter.render_frame_to_string is not None
+    rust_grayscale_available = converter.render_grayscale_to_string is not None
 
     print()
     print(LINE)
@@ -865,8 +882,9 @@ def main() -> int:
     )
     print(
         f"Mode: {args.mode}   Charset: {args.charset} "
-        f"({len(charset)} chars)   Rust: "
-        f"{'available' if rust_available else 'not built'}"
+        f"({len(charset)} chars)   Rust color: "
+        f"{'available' if rust_color_available else 'not built'}   Rust grayscale: "
+        f"{'available' if rust_grayscale_available else 'not built'}"
     )
 
     if image_path is None and not args.video_only:
@@ -922,6 +940,7 @@ def main() -> int:
     print("The bottleneck is the stage consuming the largest share of total time.")
     print("Grayscale video does not perform BGR -> RGB because its conversion is channel-order independent.")
     print("Color image output renders directly to one ANSI string in Rust; Python ANSI formatting is excluded.")
+    print("Grayscale image/video output renders directly to one ASCII string in Rust when the extension is available.")
     print("Video total excludes terminal writes and real-time playback sleeping.")
     print(LINE)
 

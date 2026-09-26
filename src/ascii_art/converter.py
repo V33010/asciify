@@ -3,10 +3,15 @@ import numpy as np
 
 # Try to import the Rust extension.
 try:
-    from .ascii_art_rs import image_to_ascii_rs, render_frame_to_string
+    from .ascii_art_rs import (
+        image_to_ascii_rs,
+        render_frame_to_string,
+        render_grayscale_to_string,
+    )
 except ImportError:
     image_to_ascii_rs = None
     render_frame_to_string = None
+    render_grayscale_to_string = None
 
 
 def image_to_ascii(img, charset):
@@ -48,6 +53,27 @@ def render_image_to_string(img, charset):
     img_rgb = img if img.mode == "RGB" else img.convert("RGB")
     arr = np.asarray(img_rgb)
     return render_frame_to_string(arr, list(charset))
+
+
+def render_grayscale_image_to_string(img, charset):
+    """Render a grayscale PIL image directly to one ASCII string in Rust.
+
+    The grayscale mapping is based on the maximum of the RGB channels, so
+    channel order does not matter. Rust performs both the pixel-to-charset
+    conversion and the terminal-width formatting, avoiding Python per-pixel
+    work on the terminal path.
+    """
+    if render_grayscale_to_string is None:
+        raise ImportError(
+            "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
+        )
+
+    if not charset:
+        raise ValueError("Charset must be a non-empty string.")
+
+    img_rgb = img if img.mode == "RGB" else img.convert("RGB")
+    arr = np.asarray(img_rgb)
+    return render_grayscale_to_string(arr, list(charset))
 
 
 def image_to_ascii_with_color(img, charset):

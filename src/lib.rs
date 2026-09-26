@@ -93,9 +93,55 @@ fn render_frame_to_string(
     Ok(output)
 }
 
+/// Target C: Renders a grayscale frame directly to a single ASCII string.
+///
+/// Grayscale conversion uses the maximum of the first three channels, which
+/// matches the Python converter and is invariant to RGB/BGR channel order.
+#[pyfunction]
+fn render_grayscale_to_string(
+    _py: Python,
+    img_array: PyReadonlyArray3<u8>,
+    charset: Vec<String>,
+) -> PyResult<String> {
+    if charset.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Charset must be a non-empty string.",
+        ));
+    }
+
+    let array = img_array.as_array();
+    let shape = array.shape();
+    let rows = shape[0];
+    let cols = shape[1];
+
+    let max_idx = (charset.len() - 1) as f32;
+    let scale = max_idx / 255.0;
+    let max_char_len = charset.iter().map(String::len).max().unwrap_or(1);
+    let capacity = rows * cols * (max_char_len + 1) + rows;
+    let mut output = String::with_capacity(capacity);
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let c0 = *array.get([r, c, 0]).unwrap_or(&0);
+            let c1 = *array.get([r, c, 1]).unwrap_or(&0);
+            let c2 = *array.get([r, c, 2]).unwrap_or(&0);
+
+            let max_val = c0.max(c1).max(c2);
+            let idx = (max_val as f32 * scale) as usize;
+            let safe_idx = idx.min(charset.len() - 1);
+            output.push_str(&charset[safe_idx]);
+            output.push(' ');
+        }
+        output.push('\n');
+    }
+
+    Ok(output)
+}
+
 #[pymodule]
 fn ascii_art_rs(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(image_to_ascii_rs, m)?)?;
     m.add_function(wrap_pyfunction!(render_frame_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(render_grayscale_to_string, m)?)?;
     Ok(())
 }
