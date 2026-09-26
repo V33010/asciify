@@ -941,6 +941,7 @@ def main() -> int:
     print("Grayscale video does not perform BGR -> RGB because its conversion is channel-order independent.")
     print("Color image output renders directly to one ANSI string in Rust; Python ANSI formatting is excluded.")
     print("Grayscale image/video output renders directly to one ASCII string in Rust when the extension is available.")
+    print("Rust release builds use opt-level=3, thin LTO, and one codegen unit; render buffers are reused per worker thread.")
     print("Video total excludes terminal writes and real-time playback sleeping.")
     print(LINE)
 
