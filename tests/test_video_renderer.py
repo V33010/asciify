@@ -150,6 +150,28 @@ def test_play_video_color_uses_rust_renderer_when_available(monkeypatch, capsys)
     assert cap.released is True
 
 
+def test_play_video_grayscale_skips_bgr_to_rgb_conversion(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(20)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "move_cursor_home", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+
+    def unexpected_color_conversion(*args, **kwargs):
+        raise AssertionError("grayscale video should not convert BGR to RGB")
+
+    monkeypatch.setattr(
+        video_renderer.cv2,
+        "cvtColor",
+        unexpected_color_conversion,
+    )
+
+    video_renderer.play_video("video.mp4", make_args(color=False))
+
+    capsys.readouterr()
+    assert cap.released is True
+
+
 def test_play_video_handles_keyboard_interrupt(monkeypatch, capsys):
     import ascii_art.converter as converter
 

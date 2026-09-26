@@ -448,13 +448,24 @@ def make_video_run(
         raise RuntimeError(f"could not open video: {video_path}")
 
     try:
-        stages = {
-            "open video": open_ms,
-            "decode": 0.0,
-            "resize": 0.0,
-            "BGR -> RGB": 0.0,
-            "render": 0.0,
-        }
+        # BGR -> RGB is required only by the color renderer. The grayscale
+        # converter is channel-order independent, so grayscale stays in the
+        # OpenCV-native BGR layout and avoids that extra full-frame copy.
+        if color:
+            stages = {
+                "open video": open_ms,
+                "decode": 0.0,
+                "resize": 0.0,
+                "BGR -> RGB": 0.0,
+                "render": 0.0,
+            }
+        else:
+            stages = {
+                "open video": open_ms,
+                "decode": 0.0,
+                "resize": 0.0,
+                "render": 0.0,
+            }
 
         frames = 0
 
@@ -479,16 +490,21 @@ def make_video_run(
             )
             stages["resize"] += ms(time.perf_counter_ns() - start)
 
-            start = time.perf_counter_ns()
-            frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
-            stages["BGR -> RGB"] += ms(time.perf_counter_ns() - start)
-
-            start = time.perf_counter_ns()
             if color:
+                start = time.perf_counter_ns()
+                frame_rgb = cv2.cvtColor(
+                    frame_resized,
+                    cv2.COLOR_BGR2RGB,
+                )
+                stages["BGR -> RGB"] += ms(time.perf_counter_ns() - start)
+
+                start = time.perf_counter_ns()
                 render_color_frame(frame_rgb, charset)
+                stages["render"] += ms(time.perf_counter_ns() - start)
             else:
-                render_grayscale_frame(frame_rgb, charset)
-            stages["render"] += ms(time.perf_counter_ns() - start)
+                start = time.perf_counter_ns()
+                render_grayscale_frame(frame_resized, charset)
+                stages["render"] += ms(time.perf_counter_ns() - start)
 
             frames += 1
 
@@ -920,6 +936,7 @@ def main() -> int:
     print("TOTAL MEDIAN is the main number to track between optimizations.")
     print("Use the same machine, assets, dimensions, charset, and run count.")
     print("The bottleneck is the stage consuming the largest share of total time.")
+    print("Grayscale video does not perform BGR -> RGB because its conversion is channel-order independent.")
     print("Video total excludes terminal writes and real-time playback sleeping.")
     print(LINE)
 

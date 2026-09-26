@@ -40,8 +40,18 @@ def play_video(filepath, args):
             print("❌ Error: Video is empty or unreadable.")
             return
 
-        first_frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(first_frame_rgb)
+        if args.color:
+            first_frame_for_dimensions = cv2.cvtColor(
+                first_frame,
+                cv2.COLOR_BGR2RGB,
+            )
+        else:
+            # Grayscale conversion uses max(B, G, R), so channel order is
+            # irrelevant. Keep OpenCV's native BGR frame and avoid a full
+            # frame BGR -> RGB conversion.
+            first_frame_for_dimensions = first_frame
+
+        pil_img = Image.fromarray(first_frame_for_dimensions)
 
         # Determine Dimensions
         target_w, target_h = None, None
@@ -110,22 +120,27 @@ def play_video(filepath, args):
                 target_h,
             )
 
-            frame_rgb = cv2.cvtColor(
-                frame_resized,
-                cv2.COLOR_BGR2RGB,
-            )
+            if args.color:
+                frame_for_render = cv2.cvtColor(
+                    frame_resized,
+                    cv2.COLOR_BGR2RGB,
+                )
+            else:
+                # Grayscale conversion uses max(B, G, R), so BGR is already
+                # in the correct representation for this operation.
+                frame_for_render = frame_resized
 
             ui.move_cursor_home()
 
             if args.color:
                 output_str = render_frame_to_string(
-                    frame_rgb,
+                    frame_for_render,
                     chars_list,
                 )
                 sys.stdout.write(output_str)
 
             else:
-                pil_frame = Image.fromarray(frame_rgb)
+                pil_frame = Image.fromarray(frame_for_render)
 
                 from . import converter
 
