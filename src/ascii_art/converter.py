@@ -5,11 +5,15 @@ import numpy as np
 try:
     from .ascii_art_rs import (
         image_to_ascii_rs,
+        render_fill_hd_to_string,
+        render_fill_to_string,
         render_frame_to_string,
         render_grayscale_to_string,
     )
 except ImportError:
     image_to_ascii_rs = None
+    render_fill_hd_to_string = None
+    render_fill_to_string = None
     render_frame_to_string = None
     render_grayscale_to_string = None
 
@@ -79,6 +83,30 @@ def render_grayscale_image_to_string(img, charset):
     img_rgb = img if img.mode == "RGB" else img.convert("RGB")
     arr = np.asarray(img_rgb)
     return render_grayscale_to_string(arr, list(charset))
+
+
+def render_fill_image_to_string(img):
+    """Render a PIL image directly to solid 24-bit background-colored cells in Rust."""
+    if render_fill_to_string is None:
+        raise ImportError(
+            "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
+        )
+
+    img_rgb = img if img.mode == "RGB" else img.convert("RGB")
+    arr = np.asarray(img_rgb)
+    return render_fill_to_string(arr)
+
+
+def render_fill_hd_image_to_string(img):
+    """Render a PIL image directly to high-density half-block (▀) cells in Rust."""
+    if render_fill_hd_to_string is None:
+        raise ImportError(
+            "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
+        )
+
+    img_rgb = img if img.mode == "RGB" else img.convert("RGB")
+    arr = np.asarray(img_rgb)
+    return render_fill_hd_to_string(arr)
 
 
 def image_to_ascii_with_color(img, charset):

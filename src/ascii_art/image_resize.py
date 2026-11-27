@@ -143,3 +143,33 @@ def get_auto_terminal_dimensions(img):
     final_h = max(1, final_h)
 
     return final_w, final_h
+
+
+def get_auto_terminal_dimensions_hd(img):
+    """
+    Calculates pixel dimensions for half-block (`--fill-hd`) mode.
+
+    Each terminal cell is 1 column wide and packs 2 vertical pixels via `▀`
+    (foreground = top pixel, background = bottom pixel). Because a monospace
+    cell is roughly 1:2 (width:height), each half-block pixel is nearly square,
+    giving 2x horizontal and 2x vertical pixel density over standard mode.
+    """
+    term_w, term_h = shutil.get_terminal_size()
+
+    max_w = max(1, term_w - 2)
+    max_h = max(2, (term_h - 1) * 2)
+
+    iw, ih = img.size
+
+    n = max(iw / max_w, ih / max_h)
+    if n == 0:
+        n = 1
+
+    final_w = max(1, int(iw / n))
+    final_h = max(2, int(ih / n))
+
+    # Keep height even so every bottom half-block pairs with a real pixel row.
+    if final_h % 2 == 1:
+        final_h = final_h + 1 if final_h + 1 <= max_h else max(2, final_h - 1)
+
+    return final_w, final_h

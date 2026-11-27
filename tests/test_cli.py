@@ -131,3 +131,15 @@ def test_parse_args_version_flag_prints_version_and_exits(monkeypatch, capsys):
         cli.parse_args()
     assert exc.value.code == 0
     assert cli.__version__ in capsys.readouterr().out
+
+
+def test_parse_args_supports_fill_and_fill_hd_flags(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["asciify", "-i", "image.png", "--fill"])
+    args = cli.parse_args()
+    assert args.fill is True
+    assert args.fill_hd is False
+
+    monkeypatch.setattr(sys, "argv", ["asciify", "-i", "image.png", "--fill-hd"])
+    args_hd = cli.parse_args()
+    assert args_hd.fill is False
+    assert args_hd.fill_hd is True

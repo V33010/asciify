@@ -150,3 +150,27 @@ def test_auto_terminal_dimensions_handles_wide_image(monkeypatch):
 
 def os_terminal_size(columns: int, lines: int):
     return os.terminal_size((columns, lines))
+
+
+def test_auto_terminal_dimensions_hd_doubles_density_and_keeps_even_height(monkeypatch):
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda: os_terminal_size(80, 25))
+    img = Image.new("RGB", (400, 200))
+
+    std_w, std_h = image_resize.get_auto_terminal_dimensions(img)
+    hd_w, hd_h = image_resize.get_auto_terminal_dimensions_hd(img)
+
+    assert hd_w >= 1 and hd_h >= 2
+    assert hd_w <= 80 - 2
+    assert hd_h <= (25 - 1) * 2
+    assert hd_h % 2 == 0
+    assert hd_w > std_w
+    assert hd_h > std_h
+
+
+def test_auto_terminal_dimensions_hd_never_returns_zero(monkeypatch):
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda: os_terminal_size(4, 3))
+    img = Image.new("RGB", (10, 10))
+
+    width, height = image_resize.get_auto_terminal_dimensions_hd(img)
+    assert width >= 1 and height >= 2
+    assert height % 2 == 0

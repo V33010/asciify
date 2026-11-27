@@ -5,6 +5,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 
 def clean_filename(name):
     """Sanitizes a string to be safe for filenames."""
@@ -41,18 +43,98 @@ def generate_html(ascii_grid):
     return "\n".join(lines)
 
 
+def generate_fill_html(rgb_array, hd=False):
+    """Generates a zero-whitespace full-fill HTML document from an RGB image array."""
+    arr = np.asarray(rgb_array)
+    rows, cols = arr.shape[:2]
+
+    lines = [
+        "<!DOCTYPE html>",
+        '<html><head><meta charset="utf-8"><style>',
+        "body { background-color: #000; color: #fff; font-family: monospace; white-space: pre; line-height: 1.0; margin: 0; }",
+        "</style></head><body>",
+    ]
+
+    if not hd:
+        for r in range(rows):
+            parts = []
+            c = 0
+            while c < cols:
+                rv, gv, bv = int(arr[r, c, 0]), int(arr[r, c, 1]), int(arr[r, c, 2])
+                run = 1
+                while (
+                    c + run < cols
+                    and int(arr[r, c + run, 0]) == rv
+                    and int(arr[r, c + run, 1]) == gv
+                    and int(arr[r, c + run, 2]) == bv
+                ):
+                    run += 1
+                parts.append(
+                    f'<span style="background-color: rgb({rv},{gv},{bv})">{"  " * run}</span>'
+                )
+                c += run
+            lines.append("".join(parts))
+    else:
+        for r in range(0, rows, 2):
+            bot_r = r + 1 if r + 1 < rows else r
+            parts = []
+            c = 0
+            while c < cols:
+                top = (int(arr[r, c, 0]), int(arr[r, c, 1]), int(arr[r, c, 2]))
+                bot = (
+                    int(arr[bot_r, c, 0]),
+                    int(arr[bot_r, c, 1]),
+                    int(arr[bot_r, c, 2]),
+                )
+                run = 1
+                while c + run < cols:
+                    ntop = (
+                        int(arr[r, c + run, 0]),
+                        int(arr[r, c + run, 1]),
+                        int(arr[r, c + run, 2]),
+                    )
+                    nbot = (
+                        int(arr[bot_r, c + run, 0]),
+                        int(arr[bot_r, c + run, 1]),
+                        int(arr[bot_r, c + run, 2]),
+                    )
+                    if ntop == top and nbot == bot:
+                        run += 1
+                    else:
+                        break
+                if top == bot:
+                    parts.append(
+                        f'<span style="background-color: rgb({top[0]},{top[1]},{top[2]})">{" " * run}</span>'
+                    )
+                else:
+                    parts.append(
+                        f'<span style="color: rgb({top[0]},{top[1]},{top[2]}); background-color: rgb({bot[0]},{bot[1]},{bot[2]})">{"▀" * run}</span>'
+                    )
+                c += run
+            lines.append("".join(parts))
+
+    lines.append("</body></html>")
+    return "\n".join(lines)
+
+
 def save_art(
-    ascii_grid, original_filename, output_folder=None, output_name=None, as_html=False
+    ascii_grid,
+    original_filename,
+    output_folder=None,
+    output_name=None,
+    as_html=False,
+    fill_mode=None,
 ):
     """
     Saves the ASCII art to a file.
 
     Args:
-        ascii_grid: The 2D list of chars or (char, rgb) tuples.
+        ascii_grid: The 2D list of chars or (char, rgb) tuples, or an RGB image/array when fill_mode is set.
         original_filename: Path to the input image (used for auto-naming).
         output_folder: Directory to save in (defaults to CWD).
         output_name: Specific filename (WITHOUT extension).
         as_html: Boolean to save as .html instead of .txt.
+        fill_mode: Optional "fill" or "fill_hd" for full-fill HTML output.
     """
 
     # 1. Determine Output Directory
@@ -94,7 +176,12 @@ def save_art(
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             if as_html:
-                html_content = generate_html(ascii_grid)
+                if fill_mode in ("fill", "fill_hd"):
+                    html_content = generate_fill_html(
+                        ascii_grid, hd=(fill_mode == "fill_hd")
+                    )
+                else:
+                    html_content = generate_html(ascii_grid)
                 f.write(html_content)
             else:
                 for row in ascii_grid:

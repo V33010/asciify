@@ -18,6 +18,7 @@ New in v0.5.0: The core rendering engine has been rewritten in Rust, delivering 
 - **Headless Support:** Perfect for verifying plot.png or asset files on remote servers via SSH.
 - **URL Support:** Fetch and render images directly from the web (http://...) without manual downloading.
 - **TrueColor Support:** Renders images in full 24-bit ANSI color.
+- **Full-Fill & HD Modes:** Render solid 24-bit background-colored cells (`--fill`) or 2× density half-block cells (`--fill-hd`) with zero transparent area.
 - **Smart Resizing:** Automatically fits the output to your current terminal window dimensions.
 - **Export Options:** Save outputs as plain text .txt or color-preserving .html.
 - **Legacy Interactive Mode:** A guided menu system for creative exploration.
@@ -52,6 +53,24 @@ asciify -i https://example.com/logo.png
 To view the image with its original colors (using ANSI escape codes):
 ```sh
 asciify -i image.jpg --color
+```
+
+### 2b. Full-Fill & HD Modes (Zero Transparent Area)
+
+Render solid 24-bit color blocks with no transparent character background. Both flags automatically imply `--color` and cannot be combined with `-c`/`--charset` or plain `.txt` saving (use `--html` to save).
+
+```sh
+# Solid 24-bit background-colored cells (regular resolution)
+asciify -i image.jpg --fill
+
+# High-density half-block (▀) mode (2x horizontal & 2x vertical resolution)
+asciify -i image.jpg --fill-hd
+
+# Video playback in HD full-fill mode
+asciify -i my_video.mp4 --fill-hd
+
+# Save full-fill output as zero-whitespace HTML
+asciify -i image.jpg --fill-hd --html
 ```
 
 ### 3. Saving Output
@@ -136,6 +155,8 @@ asciify --full
 | :--- | :--- |
 | -i, --input-file | Path to local image/video OR URL (http://...). |
 | --color | Enable TrueColor ANSI output. |
+| --fill | Render solid 24-bit background-colored cells with zero transparent space (implies `--color`; incompatible with `-c`/`--charset`). |
+| --fill-hd | Render high-density half-block (`▀`) 24-bit colored cells with 2× resolution and zero transparent space (implies `--color`; incompatible with `-c`/`--charset`). |
 | -s, --save | Save output to current directory (images only). |
 | --output-folder | Specify folder for saved output. |
 | --output-file-name | Specify filename (without extension). |

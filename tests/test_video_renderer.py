@@ -255,3 +255,65 @@ def test_play_video_should_reject_negative_downsize(monkeypatch, capsys):
     )
     assert "positive number" in capsys.readouterr().out
     assert cap.released is True
+
+
+def test_play_video_fill_rejects_charset(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+
+    video_renderer.play_video("video.mp4", make_args(fill=True, charset="01"))
+    assert "--charset/-c cannot be used with --fill or --fill-hd" in capsys.readouterr().out
+
+
+def test_play_video_rejects_fill_and_fill_hd_together(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+
+    video_renderer.play_video(
+        "video.mp4", make_args(fill=True, fill_hd=True, charset=None)
+    )
+    assert "cannot be used together" in capsys.readouterr().out
+
+
+def test_play_video_fill_uses_rust_fill_renderer(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(20)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "move_cursor_home", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+    calls = []
+    monkeypatch.setattr(
+        video_renderer,
+        "render_fill_to_string",
+        lambda arr: calls.append(arr.copy()) or "FILLFRAME\n",
+    )
+
+    video_renderer.play_video("video.mp4", make_args(fill=True, charset=None))
+    output = capsys.readouterr().out
+    assert output.count("FILLFRAME") == 2
+    assert len(calls) == 2
+    assert calls[0].shape == (1, 2, 3)
+    assert cap.released is True
+
+
+def test_play_video_fill_hd_uses_rust_fill_hd_renderer(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(20)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "move_cursor_home", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+    calls = []
+    monkeypatch.setattr(
+        video_renderer,
+        "render_fill_hd_to_string",
+        lambda arr: calls.append(arr.copy()) or "HDFILLFRAME\n",
+    )
+
+    video_renderer.play_video(
+        "video.mp4", make_args(width=2, height=2, fill_hd=True, charset=None)
+    )
+    output = capsys.readouterr().out
+    assert output.count("HDFILLFRAME") == 2
+    assert len(calls) == 2
+    assert calls[0].shape == (2, 2, 3)
+    assert cap.released is True

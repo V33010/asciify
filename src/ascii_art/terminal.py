@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+import numpy as np
+
 from . import charset as charset_mod
 from . import converter, image_loader, image_resize, video_renderer, writer
 
@@ -14,6 +16,8 @@ def run_terminal_pipeline(args):
     Main logic for the terminal-first workflow.
     args: The Namespace object from argparse.
     """
+    fill = bool(getattr(args, "fill", False))
+    fill_hd = bool(getattr(args, "fill_hd", False))
 
     # --- 1. CHARSET OPERATIONS ---
     if hasattr(args, "show_charsets") and args.show_charsets:
@@ -32,6 +36,15 @@ def run_terminal_pipeline(args):
             sys.exit(1)
         if not args.input_file:
             return
+
+    # --- 1B. FILL MODE FLAG VALIDATION ---
+    if fill and fill_hd:
+        print("❌ Error: --fill and --fill-hd cannot be used together.")
+        sys.exit(1)
+
+    if (fill or fill_hd) and args.charset is not None:
+        print("❌ Error: --charset/-c cannot be used with --fill or --fill-hd.")
+        sys.exit(1)
 
     # --- 2. INPUT VALIDATION ---
     if not args.input_file:
@@ -68,6 +81,13 @@ def run_terminal_pipeline(args):
         return
 
     # --- 4. IMAGE BRANCH ---
+    should_save = any([args.save, args.output_folder, args.output_file_name, args.html])
+    if (fill or fill_hd) and should_save and not args.html:
+        print(
+            "❌ Error: Plain text (.txt) saving is not supported with --fill/--fill-hd. Use --html to save colored fill output."
+        )
+        sys.exit(1)
+
     img = None
     original_path_obj = None
 
@@ -129,26 +149,48 @@ def run_terminal_pipeline(args):
             sys.exit(1)
 
     else:
-        target_w, target_h = image_resize.get_auto_terminal_dimensions(img)
+        if fill_hd:
+            target_w, target_h = image_resize.get_auto_terminal_dimensions_hd(img)
+        else:
+            target_w, target_h = image_resize.get_auto_terminal_dimensions(img)
 
     # --- 6. RESIZE ---
     img_resized = image_resize.resize_image(img, target_w, target_h)
 
-    # --- 7. DETERMINE CHARSET ---
+    # --- 7. CONVERSION + OUTPUT TO TERMINAL ---
+    if fill or fill_hd:
+        try:
+            if fill_hd:
+                output_str = converter.render_fill_hd_image_to_string(img_resized)
+            else:
+                output_str = converter.render_fill_image_to_string(img_resized)
+        except ImportError as e:
+            print(f"❌ Error: {e}")
+            sys.exit(1)
+
+        sys.stdout.write(output_str)
+
+        if should_save:
+            img_rgb = (
+                img_resized if img_resized.mode == "RGB" else img_resized.convert("RGB")
+            )
+            writer.save_art(
+                np.asarray(img_rgb),
+                original_filename=original_path_obj,
+                output_folder=args.output_folder,
+                output_name=args.output_file_name,
+                as_html=True,
+                fill_mode="fill_hd" if fill_hd else "fill",
+            )
+        return
+
+    # --- 8. DETERMINE CHARSET (ASCII/Color modes) ---
     try:
         chars = charset_mod.get_charset(args.charset)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
-    # --- 8. DETERMINE OUTPUT REQUIREMENTS ---
-    should_save = any([args.save, args.output_folder, args.output_file_name, args.html])
-
-    # --- 9. CONVERSION + OUTPUT TO TERMINAL ---
-    # Terminal rendering uses Rust for both color and grayscale when the
-    # extension is available, avoiding Python per-character formatting and
-    # Python per-pixel ASCII conversion. Save operations still build the
-    # structured Python grid separately because writer.py consumes that format.
     ascii_grid = None
 
     if args.color:
@@ -181,7 +223,7 @@ def run_terminal_pipeline(args):
             if should_save:
                 ascii_grid = converter.image_to_ascii(img_resized, chars)
 
-    # --- 10. SAVE TO FILE (Optional) ---
+    # --- 9. SAVE TO FILE (Optional) ---
     if should_save:
         writer.save_art(
             ascii_grid,

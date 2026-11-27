@@ -42,6 +42,16 @@ def parse_args():
         "--html", action="store_true", help="Save as HTML file (preserves color)"
     )
     parser.add_argument("--color", action="store_true", help="Enable colorized output")
+    parser.add_argument(
+        "--fill",
+        action="store_true",
+        help="Render solid 24-bit background-colored cells with zero transparent space (implies --color)",
+    )
+    parser.add_argument(
+        "--fill-hd",
+        action="store_true",
+        help="Render high-resolution half-block (▀) 24-bit colored cells with 2x density and zero transparent space (implies --color)",
+    )
 
     # --- DIMENSION FLAGS ---
     parser.add_argument("--width", type=int, help="Target width")

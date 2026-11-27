@@ -145,3 +145,32 @@ def test_save_art_returns_none_on_write_error(monkeypatch, tmp_path, capsys):
     output = writer.save_art([["X"]], Path("img.png"), output_folder=tmp_path, output_name="out")
     assert output is None
     assert "Error saving file" in capsys.readouterr().out
+
+
+def test_generate_fill_html_coalesces_adjacent_pixels():
+    import numpy as np
+
+    arr = np.array(
+        [[[10, 20, 30], [10, 20, 30], [40, 50, 60]]],
+        dtype=np.uint8,
+    )
+    result = writer.generate_fill_html(arr, hd=False)
+    assert '<span style="background-color: rgb(10,20,30)">    </span>' in result
+    assert '<span style="background-color: rgb(40,50,60)">  </span>' in result
+
+
+def test_generate_fill_html_hd_packs_two_rows_and_handles_odd_height():
+    import numpy as np
+
+    arr = np.array(
+        [
+            [[1, 2, 3], [5, 5, 5]],
+            [[4, 5, 6], [5, 5, 5]],
+            [[7, 8, 9], [7, 8, 9]],
+        ],
+        dtype=np.uint8,
+    )
+    result = writer.generate_fill_html(arr, hd=True)
+    assert '<span style="color: rgb(1,2,3); background-color: rgb(4,5,6)">▀</span>' in result
+    assert '<span style="background-color: rgb(5,5,5)"> </span>' in result
+    assert '<span style="background-color: rgb(7,8,9)">  </span>' in result

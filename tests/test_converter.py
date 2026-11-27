@@ -200,3 +200,53 @@ def test_color_converter_preserves_multiple_pixels(monkeypatch):
     np.testing.assert_array_equal(
         seen["arr"], np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)
     )
+
+
+def test_render_fill_image_to_string_requires_rust_extension(monkeypatch):
+    img = Image.new("RGB", (1, 1), (1, 2, 3))
+    monkeypatch.setattr(converter, "render_fill_to_string", None)
+
+    with pytest.raises(ImportError, match="Rust extension"):
+        converter.render_fill_image_to_string(img)
+
+
+def test_render_fill_image_to_string_sends_rgb_array(monkeypatch):
+    calls = {}
+
+    def fake_renderer(arr):
+        calls["array"] = arr
+        return "\033[48;2;1;2;3m  \033[0m\n"
+
+    monkeypatch.setattr(converter, "render_fill_to_string", fake_renderer)
+    img = Image.new("RGBA", (2, 1), (1, 2, 3, 99))
+
+    result = converter.render_fill_image_to_string(img)
+
+    assert result == "\033[48;2;1;2;3m  \033[0m\n"
+    assert calls["array"].shape == (1, 2, 3)
+    assert calls["array"].dtype == np.uint8
+    assert calls["array"][0, 0].tolist() == [1, 2, 3]
+
+
+def test_render_fill_hd_image_to_string_requires_rust_extension(monkeypatch):
+    img = Image.new("RGB", (1, 2), (1, 2, 3))
+    monkeypatch.setattr(converter, "render_fill_hd_to_string", None)
+
+    with pytest.raises(ImportError, match="Rust extension"):
+        converter.render_fill_hd_image_to_string(img)
+
+
+def test_render_fill_hd_image_to_string_sends_rgb_array(monkeypatch):
+    calls = {}
+
+    def fake_renderer(arr):
+        calls["array"] = arr
+        return "\033[38;2;1;2;3;48;2;4;5;6m▀\033[0m\n"
+
+    monkeypatch.setattr(converter, "render_fill_hd_to_string", fake_renderer)
+    img = Image.new("RGB", (1, 2), (1, 2, 3))
+
+    result = converter.render_fill_hd_image_to_string(img)
+
+    assert "▀" in result
+    assert calls["array"].shape == (2, 1, 3)

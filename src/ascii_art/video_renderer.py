@@ -10,8 +10,15 @@ from . import converter, image_resize, ui
 
 # Import Rust renderer
 try:
-    from .ascii_art_rs import render_frame_to_string, render_grayscale_to_string
+    from .ascii_art_rs import (
+        render_fill_hd_to_string,
+        render_fill_to_string,
+        render_frame_to_string,
+        render_grayscale_to_string,
+    )
 except ImportError:
+    render_fill_hd_to_string = None
+    render_fill_to_string = None
     render_frame_to_string = None
     render_grayscale_to_string = None
 
@@ -20,6 +27,19 @@ def play_video(filepath, args):
     """
     Plays a video file as ASCII art in the terminal.
     """
+    fill = bool(getattr(args, "fill", False))
+    fill_hd = bool(getattr(args, "fill_hd", False))
+
+    if fill and fill_hd:
+        print("❌ Error: --fill and --fill-hd cannot be used together.")
+        return
+
+    if (fill or fill_hd) and getattr(args, "charset", None) is not None:
+        print("❌ Error: --charset/-c cannot be used with --fill or --fill-hd.")
+        return
+
+    needs_rgb = bool(args.color or fill or fill_hd)
+
     cap = cv2.VideoCapture(str(filepath))
     if not cap.isOpened():
         print(f"❌ Error: Could not open video file '{filepath}'.")
@@ -39,7 +59,7 @@ def play_video(filepath, args):
             print("❌ Error: Video is empty or unreadable.")
             return
 
-        if args.color:
+        if needs_rgb:
             first_frame_for_dimensions = cv2.cvtColor(
                 first_frame,
                 cv2.COLOR_BGR2RGB,
@@ -88,18 +108,36 @@ def play_video(filepath, args):
                 return
 
         else:
-            target_w, target_h = image_resize.get_auto_terminal_dimensions(pil_img)
+            if fill_hd:
+                target_w, target_h = image_resize.get_auto_terminal_dimensions_hd(
+                    pil_img
+                )
+            else:
+                target_w, target_h = image_resize.get_auto_terminal_dimensions(pil_img)
 
-        # Determine Charset
-        try:
-            chars_str = charset_mod.get_charset(args.charset)
-            chars_list = list(chars_str)
-        except ValueError as e:
-            print(f"Error: {e}")
-            return
+        # Determine Charset (not used in fill modes)
+        chars_str = None
+        chars_list = None
+        if not (fill or fill_hd):
+            try:
+                chars_str = charset_mod.get_charset(args.charset)
+                chars_list = list(chars_str)
+            except ValueError as e:
+                print(f"Error: {e}")
+                return
 
         # Check for Rust support
-        if args.color and render_frame_to_string is None:
+        if fill_hd and render_fill_hd_to_string is None:
+            print(
+                "❌ Error: Rust extension not found. Build with 'maturin develop'."
+            )
+            return
+        if fill and render_fill_to_string is None:
+            print(
+                "❌ Error: Rust extension not found. Build with 'maturin develop'."
+            )
+            return
+        if args.color and not (fill or fill_hd) and render_frame_to_string is None:
             print(
                 "❌ Error: Rust extension not found. Build with 'maturin develop'."
             )
@@ -119,7 +157,7 @@ def play_video(filepath, args):
                 target_h,
             )
 
-            if args.color:
+            if needs_rgb:
                 frame_for_render = cv2.cvtColor(
                     frame_resized,
                     cv2.COLOR_BGR2RGB,
@@ -131,7 +169,15 @@ def play_video(filepath, args):
 
             ui.move_cursor_home()
 
-            if args.color:
+            if fill_hd:
+                output_str = render_fill_hd_to_string(frame_for_render)
+                sys.stdout.write(output_str)
+
+            elif fill:
+                output_str = render_fill_to_string(frame_for_render)
+                sys.stdout.write(output_str)
+
+            elif args.color:
                 output_str = render_frame_to_string(
                     frame_for_render,
                     chars_list,

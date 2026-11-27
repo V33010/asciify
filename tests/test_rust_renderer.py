@@ -129,3 +129,57 @@ def test_rust_color_renderer_rejects_empty_charset():
 
     with pytest.raises(ValueError, match="non-empty"):
         rust.render_frame_to_string(arr, [])
+
+
+def test_render_fill_to_string_deduplicates_runs_and_resets_once_per_line():
+    rust = load_rust_module()
+    arr = np.array(
+        [
+            [[10, 20, 30], [10, 20, 30], [40, 50, 60]],
+            [[70, 80, 90], [70, 80, 90], [70, 80, 90]],
+        ],
+        dtype=np.uint8,
+    )
+
+    output = rust.render_fill_to_string(arr)
+    lines = output.splitlines()
+
+    assert len(lines) == 2
+    assert lines[0] == "\033[48;2;10;20;30m    \033[48;2;40;50;60m  \033[0m"
+    assert lines[1] == "\033[48;2;70;80;90m      \033[0m"
+    assert output.endswith("\n")
+
+
+def test_render_fill_hd_to_string_packs_half_blocks_and_handles_odd_height():
+    rust = load_rust_module()
+    arr = np.array(
+        [
+            [[1, 2, 3], [5, 5, 5]],
+            [[4, 5, 6], [5, 5, 5]],
+            [[7, 8, 9], [7, 8, 9]],
+        ],
+        dtype=np.uint8,
+    )
+
+    output = rust.render_fill_hd_to_string(arr)
+    lines = output.splitlines()
+
+    assert len(lines) == 2
+    assert lines[0] == "\033[38;2;1;2;3;48;2;4;5;6m▀\033[48;2;5;5;5m \033[0m"
+    assert lines[1] == "\033[48;2;7;8;9m  \033[0m"
+
+
+def test_rust_fill_renderers_preserve_output_for_non_contiguous_arrays():
+    rust = load_rust_module()
+    base = np.array(
+        [
+            [[1, 2, 3], [40, 50, 60], [70, 80, 90]],
+            [[100, 110, 120], [130, 140, 150], [200, 210, 220]],
+        ],
+        dtype=np.uint8,
+    )
+    view = base[:, ::-1, :]
+    contiguous = np.ascontiguousarray(view)
+
+    assert rust.render_fill_to_string(view) == rust.render_fill_to_string(contiguous)
+    assert rust.render_fill_hd_to_string(view) == rust.render_fill_hd_to_string(contiguous)

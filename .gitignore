@@ -85,6 +85,7 @@ assets/input/*
 # =========================
 # Temporary / Retry Files
 # =========================
+*.patch
 failed.txt
 failed2.txt
 *.tmp

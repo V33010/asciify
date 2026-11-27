@@ -354,3 +354,107 @@ def test_terminal_rejects_downsize_producing_zero_dimension(tmp_path, capsys):
         )
     assert exc.value.code == 1
     assert "non-zero dimensions" in capsys.readouterr().out
+
+
+def test_terminal_fill_rejects_charset_flag(tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(input_file=str(image_path), fill=True, charset="blocks")
+        )
+    assert exc.value.code == 1
+    assert "--charset/-c cannot be used with --fill or --fill-hd" in capsys.readouterr().out
+
+
+def test_terminal_fill_hd_rejects_charset_flag(tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(input_file=str(image_path), fill_hd=True, charset="01")
+        )
+    assert exc.value.code == 1
+    assert "--charset/-c cannot be used with --fill or --fill-hd" in capsys.readouterr().out
+
+
+def test_terminal_rejects_fill_and_fill_hd_together(tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(input_file=str(image_path), fill=True, fill_hd=True)
+        )
+    assert exc.value.code == 1
+    assert "cannot be used together" in capsys.readouterr().out
+
+
+def test_terminal_fill_rejects_plain_text_save(tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(input_file=str(image_path), fill=True, save=True)
+        )
+    assert exc.value.code == 1
+    assert "Use --html" in capsys.readouterr().out
+
+
+def test_terminal_fill_renders_directly_with_rust_and_saves_html(monkeypatch, tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (2, 1), (10, 20, 30)).save(image_path)
+    calls = {}
+
+    def fake_fill(img):
+        calls["size"] = img.size
+        return "\033[48;2;10;20;30m    \033[0m\n"
+
+    monkeypatch.setattr(terminal.converter, "render_fill_image_to_string", fake_fill)
+
+    terminal.run_terminal_pipeline(
+        make_args(
+            input_file=str(image_path),
+            width=2,
+            height=1,
+            fill=True,
+            html=True,
+            output_folder=str(tmp_path),
+            output_file_name="filled",
+        )
+    )
+
+    assert calls["size"] == (2, 1)
+    assert "\033[48;2;10;20;30m    \033[0m\n" in capsys.readouterr().out
+    out_file = tmp_path / "filled.html"
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8")
+    assert "background-color: rgb(10,20,30)" in content
+
+
+def test_terminal_fill_hd_uses_hd_auto_dimensions_and_renderer(monkeypatch, tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (4, 4), (10, 20, 30)).save(image_path)
+    calls = {}
+
+    monkeypatch.setattr(
+        terminal.image_resize,
+        "get_auto_terminal_dimensions_hd",
+        lambda img: calls.setdefault("hd_auto", (4, 4)),
+    )
+    monkeypatch.setattr(
+        terminal.converter,
+        "render_fill_hd_image_to_string",
+        lambda img: calls.setdefault("rendered_size", img.size) and "HD_OUT\n",
+    )
+
+    terminal.run_terminal_pipeline(
+        make_args(input_file=str(image_path), fill_hd=True)
+    )
+
+    assert calls["hd_auto"] == (4, 4)
+    assert calls["rendered_size"] == (4, 4)
+    assert capsys.readouterr().out == "HD_OUT\n"
