@@ -27,11 +27,16 @@ def get_charset(custom_charset=None):
     3. Default charset
     """
     # 1. Custom CLI Override
-    if custom_charset:
-        if isinstance(custom_charset, str) and len(custom_charset) > 0:
-            return custom_charset
-        else:
+    if custom_charset is not None:
+        if not isinstance(custom_charset, str) or not custom_charset:
             raise ValueError("Custom charset must be a non-empty string.")
+
+        # Allow -c blocks, -c simple, etc. to select built-in charsets.
+        if custom_charset in CHARSETS:
+            return CHARSETS[custom_charset]
+
+        # Otherwise treat it as a literal custom charset.
+        return custom_charset
 
     # 2. Check Persistent Config
     saved_charset_name = load_persistent_charset_name()

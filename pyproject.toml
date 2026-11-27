@@ -8,7 +8,14 @@ version = "0.5.0"
 description = "A hybrid CLI tool for ASCII art generation with terminal and web preview modes."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [ "maturin>=1.11.2", "numpy>=2.0.0", "opencv-python>=4.11.0.86", "pillow>=10.0.0",]
+dependencies = [ 
+    "maturin>=1.11.2",
+    "numpy>=2.0.0",
+    "opencv-python>=4.11.0.86", 
+    "pillow>=10.0.0",
+    "toml>=0.10.2",
+]
+
 [[project.authors]]
 name = "V33010"
 
@@ -25,3 +32,8 @@ Homepage = "https://github.com/V33010/asciify"
 [tool.maturin]
 module-name = "ascii_art.ascii_art_rs"
 python-source = "src"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

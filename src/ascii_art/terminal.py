@@ -115,7 +115,7 @@ def run_terminal_pipeline(args):
             print(f"Error: {e}")
             sys.exit(1)
 
-    elif args.downsize:
+    elif args.downsize is not None:
         try:
             factor = float(args.downsize)
             if factor <= 0:
@@ -139,30 +139,47 @@ def run_terminal_pipeline(args):
         print(f"Error: {e}")
         sys.exit(1)
 
-    # --- 8. CONVERSION ---
-    if args.color:
-        ascii_grid = converter.image_to_ascii_with_color(img_resized, chars)
-    else:
-        ascii_grid = converter.image_to_ascii(img_resized, chars)
-
-    # --- 9. OUTPUT TO TERMINAL ---
-    for row in ascii_grid:
-        line_parts = []
-        for item in row:
-            if isinstance(item, tuple):
-                char, (r, g, b) = item
-                display_str = char + "."
-                colored_str = ui.get_ansi_colored_string(display_str, r, g, b)
-                line_parts.append(colored_str)
-            else:
-                char = item
-                line_parts.append(char + " ")
-
-        sys.stdout.write("".join(line_parts) + "\n")
-
-    # --- 10. SAVE TO FILE (Optional) ---
+    # --- 8. DETERMINE OUTPUT REQUIREMENTS ---
     should_save = any([args.save, args.output_folder, args.output_file_name, args.html])
 
+    # --- 9. CONVERSION + OUTPUT TO TERMINAL ---
+    # Terminal rendering now uses Rust for both color and grayscale when the
+    # extension is available, avoiding Python per-character formatting and
+    # Python per-pixel ASCII conversion. Save operations still build the
+    # structured Python grid separately because writer.py consumes that format.
+    ascii_grid = None
+
+    if args.color:
+        try:
+            output_str = converter.render_image_to_string(img_resized, chars)
+        except ImportError as e:
+            print(f"❌ Error: {e}")
+            sys.exit(1)
+
+        sys.stdout.write(output_str)
+
+        if should_save:
+            ascii_grid = converter.image_to_ascii_with_color(img_resized, chars)
+    else:
+        try:
+            output_str = converter.render_grayscale_image_to_string(
+                img_resized,
+                chars,
+            )
+        except ImportError:
+            # Keep grayscale terminal output working in Python-only source
+            # checkouts where the optional Rust extension is not built.
+            ascii_grid = converter.image_to_ascii(img_resized, chars)
+            for row in ascii_grid:
+                line_parts = [char + " " for char in row]
+                sys.stdout.write("".join(line_parts) + "\n")
+        else:
+            sys.stdout.write(output_str)
+
+            if should_save:
+                ascii_grid = converter.image_to_ascii(img_resized, chars)
+
+    # --- 10. SAVE TO FILE (Optional) ---
     if should_save:
         writer.save_art(
             ascii_grid,

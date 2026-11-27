@@ -12,124 +12,296 @@ from . import image_resize, ui
 
 # Import Rust renderer
 try:
-    from .ascii_art_rs import render_frame_to_string
+    from .ascii_art_rs import render_frame_to_string, render_grayscale_to_string
 except ImportError:
     render_frame_to_string = None
+    render_grayscale_to_string = None
 
 
 def play_video(filepath, args):
     """
     Plays a video file as ASCII art in the terminal.
     """
-    # 1. Open Video
     cap = cv2.VideoCapture(str(filepath))
     if not cap.isOpened():
         print(f"❌ Error: Could not open video file '{filepath}'.")
         return
 
-    # 2. Get Video Properties
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps <= 0:
-        fps = 30.0  # Fallback
-    frame_delay = 1.0 / fps
+    try:
+        # 1. Get Video Properties
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30.0
+        frame_delay = 1.0 / fps
 
-    # 3. Setup Logic (Dimensions & Charset)
-    ret, first_frame = cap.read()
-    if not ret:
-        print("❌ Error: Video is empty or unreadable.")
-        return
+        # 2. Decode the first frame.
+        # This frame is also rendered below; it isn't discarded.
+        ret, first_frame = cap.read()
+        if not ret:
+            print("❌ Error: Video is empty or unreadable.")
+            return
 
-    first_frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(first_frame_rgb)
-
-    # Determine Dimensions
-    target_w, target_h = None, None
-    if args.width or args.height:
-        try:
-            target_w, target_h = image_resize.calculate_dimensions(
-                pil_img, args.width, args.height, args.aspect_ratio
+        if args.color:
+            first_frame_for_dimensions = cv2.cvtColor(
+                first_frame,
+                cv2.COLOR_BGR2RGB,
             )
+        else:
+            # Grayscale conversion uses max(B, G, R), so channel order is
+            # irrelevant. Keep OpenCV's native BGR frame and avoid a full
+            # frame BGR -> RGB conversion.
+            first_frame_for_dimensions = first_frame
+
+        pil_img = Image.fromarray(first_frame_for_dimensions)
+
+        # Determine Dimensions
+        target_w, target_h = None, None
+
+        if args.width or args.height:
+            try:
+                target_w, target_h = image_resize.calculate_dimensions(
+                    pil_img,
+                    args.width,
+                    args.height,
+                    args.aspect_ratio,
+                )
+            except ValueError as e:
+                print(f"Error: {e}")
+                return
+
+        elif args.downsize is not None:
+            try:
+                factor = float(args.downsize)
+
+                if factor <= 0:
+                    raise ValueError
+
+                target_w = int(pil_img.width / factor)
+                target_h = int(pil_img.height / factor)
+
+                if target_w < 1 or target_h < 1:
+                    raise ValueError
+
+            except ValueError:
+                print(
+                    "Error: --downsize must be a positive number "
+                    "that produces non-zero dimensions."
+                )
+                return
+
+        else:
+            target_w, target_h = image_resize.get_auto_terminal_dimensions(pil_img)
+
+        # Determine Charset
+        try:
+            chars_str = charset_mod.get_charset(args.charset)
+            chars_list = list(chars_str)
         except ValueError as e:
             print(f"Error: {e}")
             return
-    elif args.downsize:
-        try:
-            factor = float(args.downsize)
-            target_w = int(pil_img.width / factor)
-            target_h = int(pil_img.height / factor)
-        except ValueError:
-            print("Error: --downsize must be a positive number.")
+
+        # Check for Rust support
+        if args.color and render_frame_to_string is None:
+            print(
+                "❌ Error: Rust extension not found. " "Build with 'maturin develop'."
+            )
             return
-    else:
-        target_w, target_h = image_resize.get_auto_terminal_dimensions(pil_img)
 
-    # Determine Charset
-    try:
-        chars_str = charset_mod.get_charset(args.charset)
-        # Rust requires a List[str], not a single str
-        chars_list = list(chars_str)
-    except ValueError as e:
-        print(f"Error: {e}")
-        return
+        ui.clear_terminal()
 
-    # Check for Rust support
-    if args.color and render_frame_to_string is None:
-        print("❌ Error: Rust extension not found. Build with 'maturin develop'.")
-        return
+        # Render the first frame that was already decoded.
+        frame = first_frame
 
-    # Clear screen ONCE before starting
-    ui.clear_terminal()
-
-    try:
         while True:
             start_time = time.time()
 
-            ret, frame = cap.read()
-            if not ret:
-                break  # End of video
-
-            # Resize Frame (OpenCV is faster than PIL here, stay in CV2/NumPy land)
-            # OpenCV expects (width, height)
-            frame_resized = cv2.resize(
-                frame, (target_w, target_h), interpolation=cv2.INTER_AREA
+            frame_resized = image_resize.resize_video_frame(
+                frame,
+                target_w,
+                target_h,
             )
 
-            # Convert BGR (OpenCV) to RGB (Standard)
-            # We pass this numpy array directly to Rust
-            frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+            if args.color:
+                frame_for_render = cv2.cvtColor(
+                    frame_resized,
+                    cv2.COLOR_BGR2RGB,
+                )
+            else:
+                # Grayscale conversion uses max(B, G, R), so BGR is already
+                # in the correct representation for this operation.
+                frame_for_render = frame_resized
 
-            # RENDER FRAME
             ui.move_cursor_home()
 
             if args.color:
-                # --- NEW RUST PATH ---
-                # Returns one giant string with all ANSI codes
-                output_str = render_frame_to_string(frame_rgb, chars_list)
+                output_str = render_frame_to_string(
+                    frame_for_render,
+                    chars_list,
+                )
                 sys.stdout.write(output_str)
+
+            elif render_grayscale_to_string is not None:
+                # Rust performs both grayscale character mapping and terminal
+                # formatting directly from the resized OpenCV BGR frame.
+                output_str = render_grayscale_to_string(
+                    frame_for_render,
+                    chars_list,
+                )
+                sys.stdout.write(output_str)
+
             else:
-                # --- LEGACY GRAYSCALE PATH (Keep Python/NumPy) ---
-                # Since we optimized COLOR, let's rely on the old converter for grayscale
-                pil_frame = Image.fromarray(frame_rgb)
+                # Python fallback for source checkouts without the optional
+                # Rust extension.
+                pil_frame = Image.fromarray(frame_for_render)
+
                 from . import converter
 
-                ascii_grid = converter.image_to_ascii(pil_frame, chars_str)
+                ascii_grid = converter.image_to_ascii(
+                    pil_frame,
+                    chars_str,
+                )
 
                 output_buffer = []
+
                 for row in ascii_grid:
-                    # Grayscale aspect ratio fix
                     row_parts = [char + " " for char in row]
                     output_buffer.append("".join(row_parts))
+
                 sys.stdout.write("\n".join(output_buffer))
 
             sys.stdout.flush()
 
-            # TIMING CONTROL
             process_time = time.time() - start_time
             sleep_time = max(0, frame_delay - process_time)
             time.sleep(sleep_time)
 
+            # Only now read the next frame.
+            ret, frame = cap.read()
+
+            if not ret:
+                break
+
     except KeyboardInterrupt:
         ui.clear_terminal()
         print("\nStopped.")
+
     finally:
         cap.release()
+
+
+# def play_video(filepath, args):
+#     """
+#     Plays a video file as ASCII art in the terminal.
+#     """
+#     # 1. Open Video
+#     cap = cv2.VideoCapture(str(filepath))
+#     if not cap.isOpened():
+#         print(f"❌ Error: Could not open video file '{filepath}'.")
+#         return
+#
+#     # 2. Get Video Properties
+#     fps = cap.get(cv2.CAP_PROP_FPS)
+#     if fps <= 0:
+#         fps = 30.0  # Fallback
+#     frame_delay = 1.0 / fps
+#
+#     # 3. Setup Logic (Dimensions & Charset)
+#     ret, first_frame = cap.read()
+#     if not ret:
+#         print("❌ Error: Video is empty or unreadable.")
+#         return
+#
+#     first_frame_rgb = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
+#     pil_img = Image.fromarray(first_frame_rgb)
+#
+#     # Determine Dimensions
+#     target_w, target_h = None, None
+#     if args.width or args.height:
+#         try:
+#             target_w, target_h = image_resize.calculate_dimensions(
+#                 pil_img, args.width, args.height, args.aspect_ratio
+#             )
+#         except ValueError as e:
+#             print(f"Error: {e}")
+#             return
+#     elif args.downsize:
+#         try:
+#             factor = float(args.downsize)
+#             target_w = int(pil_img.width / factor)
+#             target_h = int(pil_img.height / factor)
+#         except ValueError:
+#             print("Error: --downsize must be a positive number.")
+#             return
+#     else:
+#         target_w, target_h = image_resize.get_auto_terminal_dimensions(pil_img)
+#
+#     # Determine Charset
+#     try:
+#         chars_str = charset_mod.get_charset(args.charset)
+#         # Rust requires a List[str], not a single str
+#         chars_list = list(chars_str)
+#     except ValueError as e:
+#         print(f"Error: {e}")
+#         return
+#
+#     # Check for Rust support
+#     if args.color and render_frame_to_string is None:
+#         print("❌ Error: Rust extension not found. Build with 'maturin develop'.")
+#         return
+#
+#     # Clear screen ONCE before starting
+#     ui.clear_terminal()
+#
+#     try:
+#         while True:
+#             start_time = time.time()
+#
+#             ret, frame = cap.read()
+#             if not ret:
+#                 break  # End of video
+#
+#             # Resize Frame (OpenCV is faster than PIL here, stay in CV2/NumPy land)
+#             # OpenCV expects (width, height)
+#             frame_resized = cv2.resize(
+#                 frame, (target_w, target_h), interpolation=cv2.INTER_AREA
+#             )
+#
+#             # Convert BGR (OpenCV) to RGB (Standard)
+#             # We pass this numpy array directly to Rust
+#             frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+#
+#             # RENDER FRAME
+#             ui.move_cursor_home()
+#
+#             if args.color:
+#                 # --- NEW RUST PATH ---
+#                 # Returns one giant string with all ANSI codes
+#                 output_str = render_frame_to_string(frame_rgb, chars_list)
+#                 sys.stdout.write(output_str)
+#             else:
+#                 # --- LEGACY GRAYSCALE PATH (Keep Python/NumPy) ---
+#                 # Since we optimized COLOR, let's rely on the old converter for grayscale
+#                 pil_frame = Image.fromarray(frame_rgb)
+#                 from . import converter
+#
+#                 ascii_grid = converter.image_to_ascii(pil_frame, chars_str)
+#
+#                 output_buffer = []
+#                 for row in ascii_grid:
+#                     # Grayscale aspect ratio fix
+#                     row_parts = [char + " " for char in row]
+#                     output_buffer.append("".join(row_parts))
+#                 sys.stdout.write("\n".join(output_buffer))
+#
+#             sys.stdout.flush()
+#
+#             # TIMING CONTROL
+#             process_time = time.time() - start_time
+#             sleep_time = max(0, frame_delay - process_time)
+#             time.sleep(sleep_time)
+#
+#     except KeyboardInterrupt:
+#         ui.clear_terminal()
+#         print("\nStopped.")
+#     finally:
+#         cap.release()
