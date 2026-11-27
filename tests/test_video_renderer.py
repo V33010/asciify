@@ -317,3 +317,102 @@ def test_play_video_fill_hd_uses_rust_fill_hd_renderer(monkeypatch, capsys):
     assert len(calls) == 2
     assert calls[0].shape == (2, 2, 3)
     assert cap.released is True
+
+
+def test_frame_prefetcher_delivers_all_frames_in_order():
+    cap = FakeCapture([make_frame(10), make_frame(20), make_frame(30)])
+    prefetcher = video_renderer._FramePrefetcher(cap, 2, 1, needs_rgb=False, maxsize=2).start()
+    try:
+        collected = []
+        while True:
+            frame = prefetcher.get()
+            if frame is None:
+                break
+            collected.append(int(frame[0, 0, 0]))
+    finally:
+        prefetcher.stop()
+
+    assert collected == [10, 20, 30]
+
+
+def test_play_video_wraps_frames_in_sync_markers_and_restores_cursor(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(20)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(
+        video_renderer,
+        "render_grayscale_to_string",
+        lambda arr, chars: "FRAME\n",
+    )
+
+    video_renderer.play_video("video.mp4", make_args(color=False))
+    output = capsys.readouterr().out
+
+    assert video_renderer.ui.CURSOR_HIDE in output
+    assert video_renderer.ui.CURSOR_SHOW in output
+    assert output.count(video_renderer.ui.SYNC_START) == 2
+    assert video_renderer.ui.SYNC_END in output
+
+
+def test_play_video_uses_diff_renderer_and_skips_unchanged_frame_writes(monkeypatch, capsys):
+    cap = FakeCapture([make_frame(10), make_frame(10), make_frame(200)])
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "hide_cursor", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "show_cursor", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+
+    resets = []
+    responses = iter(["FULL_DIFF", "", "PARTIAL_DIFF"])
+    monkeypatch.setattr(video_renderer, "reset_diff_state", lambda: resets.append(1))
+    monkeypatch.setattr(
+        video_renderer,
+        "render_fill_hd_diff_to_string",
+        lambda arr: next(responses),
+    )
+
+    video_renderer.play_video(
+        "video.mp4", make_args(width=2, height=2, fill_hd=True, charset=None)
+    )
+    output = capsys.readouterr().out
+
+    assert output == "FULL_DIFFPARTIAL_DIFF"
+    assert len(resets) == 2  # reset before playback and in finally
+    assert cap.released is True
+
+
+def test_play_video_drops_stale_frames_when_falling_behind(monkeypatch, capsys):
+    real_sleep = video_renderer.time.sleep
+    frames = [make_frame(i * 40) for i in range(5)]
+    cap = FakeCapture(frames, fps=10.0)  # frame_delay = 0.1s
+    monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
+    monkeypatch.setattr(video_renderer.ui, "clear_terminal", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "hide_cursor", lambda: None)
+    monkeypatch.setattr(video_renderer.ui, "show_cursor", lambda: None)
+    monkeypatch.setattr(video_renderer.time, "sleep", lambda seconds: None)
+
+    # Simulate a large clock jump right after frame 0 so queued frames are stale.
+    clock = iter([0.0, 0.35, 0.36, 0.37, 0.38, 0.39, 0.40])
+    monkeypatch.setattr(video_renderer.time, "monotonic", lambda: next(clock, 0.5))
+
+    rendered = []
+
+    def fake_render(arr, chars):
+        rendered.append(int(arr[0, 0, 0]))
+        if len(rendered) == 1:
+            real_sleep(0.02)
+        return "X\n"
+
+    monkeypatch.setattr(
+        video_renderer,
+        "render_grayscale_to_string",
+        fake_render,
+    )
+
+    video_renderer.play_video("video.mp4", make_args(color=False))
+    capsys.readouterr()
+
+    assert len(rendered) >= 1
+    assert len(rendered) < len(frames)
+    assert cap.released is True

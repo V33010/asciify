@@ -34,6 +34,21 @@ const U8_DEC: [&str; 256] = [
     "250", "251", "252", "253", "254", "255",
 ];
 
+/// DEC Mode 2026 synchronized output markers for tear-free atomic frame paints.
+const SYNC_START: &str = "\x1b[?2026h";
+const SYNC_END: &str = "\x1b[?2026l";
+
+/// Per-channel delta threshold for differential video rendering.
+/// Suppresses invisible ±1..4 H.264/VP9 compression jitter without visible loss.
+const COLOR_DIFF_THRESHOLD: u8 = 4;
+
+#[derive(Default)]
+struct PrevFrameState {
+    rows: usize,
+    cols: usize,
+    rgb: Vec<u8>,
+}
+
 thread_local! {
     /// Reused on each render call on a given Python worker thread.
     ///
@@ -41,6 +56,9 @@ thread_local! {
     /// Python-side allocation, but reusing this Rust buffer avoids rebuilding
     /// the large native `String` capacity for every video frame.
     static OUTPUT_BUFFER: RefCell<String> = RefCell::new(String::new());
+
+    /// Last rendered RGB frame for frame-to-frame differential video updates.
+    static PREV_FRAME_STATE: RefCell<PrevFrameState> = RefCell::new(PrevFrameState::default());
 }
 
 #[inline]
@@ -146,6 +164,34 @@ fn push_u8_decimal(output: &mut String, value: u8) {
     output.push_str(U8_DEC[value as usize]);
 }
 
+/// Append a positive usize decimal (used for 1-based ANSI cursor coordinates).
+#[inline(always)]
+fn push_usize_decimal(output: &mut String, mut value: usize) {
+    if value < 256 {
+        output.push_str(U8_DEC[value]);
+        return;
+    }
+    let mut buf = [0u8; 20];
+    let mut idx = buf.len();
+    while value > 0 {
+        idx -= 1;
+        buf[idx] = b'0' + (value % 10) as u8;
+        value /= 10;
+    }
+    if let Ok(s) = std::str::from_utf8(&buf[idx..]) {
+        output.push_str(s);
+    }
+}
+
+#[inline(always)]
+fn push_cursor_pos(output: &mut String, row_1based: usize, col_1based: usize) {
+    output.push_str("\x1b[");
+    push_usize_decimal(output, row_1based);
+    output.push(';');
+    push_usize_decimal(output, col_1based);
+    output.push('H');
+}
+
 #[inline(always)]
 fn push_rgb_params(output: &mut String, r: u8, g: u8, b: u8) {
     push_u8_decimal(output, r);
@@ -153,6 +199,13 @@ fn push_rgb_params(output: &mut String, r: u8, g: u8, b: u8) {
     push_u8_decimal(output, g);
     output.push(';');
     push_u8_decimal(output, b);
+}
+
+#[inline(always)]
+fn rgb_changed(a: (u8, u8, u8), b: (u8, u8, u8), threshold: u8) -> bool {
+    a.0.abs_diff(b.0) > threshold
+        || a.1.abs_diff(b.1) > threshold
+        || a.2.abs_diff(b.2) > threshold
 }
 
 #[inline(always)]
@@ -352,6 +405,67 @@ fn render_fill_hd_contiguous(
 
         output.push_str("\x1b[0m\n");
         r += 2;
+    }
+}
+
+/// Extract an RGB pixel at `(r, c)` from either a contiguous slice or strided array.
+#[inline(always)]
+fn read_rgb_packed(
+    array: &numpy::ndarray::ArrayView3<u8>,
+    contiguous: Option<&[u8]>,
+    cols: usize,
+    channels: usize,
+    r: usize,
+    c: usize,
+) -> (u8, u8, u8) {
+    if let Some(data) = contiguous {
+        if channels >= 3 {
+            let base = (r * cols + c) * channels;
+            return (data[base], data[base + 1], data[base + 2]);
+        }
+    }
+    (
+        *array.get([r, c, 0]).unwrap_or(&0),
+        *array.get([r, c, 1]).unwrap_or(&0),
+        *array.get([r, c, 2]).unwrap_or(&0),
+    )
+}
+
+/// Copy an RGB frame into a tightly-packed 3-byte-per-pixel buffer.
+fn store_rgb_frame(
+    dest: &mut Vec<u8>,
+    array: &numpy::ndarray::ArrayView3<u8>,
+    contiguous: Option<&[u8]>,
+    rows: usize,
+    cols: usize,
+    channels: usize,
+) {
+    let needed = rows.saturating_mul(cols).saturating_mul(3);
+    dest.clear();
+    if dest.capacity() < needed {
+        dest.reserve(needed - dest.capacity());
+    }
+    if let Some(data) = contiguous {
+        if channels == 3 {
+            dest.extend_from_slice(&data[..needed]);
+            return;
+        }
+        if channels > 3 {
+            for px in data.chunks_exact(channels).take(rows * cols) {
+                dest.push(px[0]);
+                dest.push(px[1]);
+                dest.push(px[2]);
+            }
+            return;
+        }
+    }
+    for r in 0..rows {
+        for c in 0..cols {
+            let (rv, gv, bv) = read_rgb_packed(array, None, cols, channels, r, c);
+            dest.push(rv);
+            dest.push(gv);
+            dest.push(bv);
+        }
     }
 }
 
@@ -666,6 +780,264 @@ fn render_fill_hd_to_string(
     })
 }
 
+/// Clear stored previous-frame state for differential video renderers.
+#[pyfunction]
+fn reset_diff_state() {
+    PREV_FRAME_STATE.with(|state| {
+        let mut s = state.borrow_mut();
+        s.rows = 0;
+        s.cols = 0;
+        s.rgb.clear();
+    });
+}
+
+/// Differential video renderer for `--fill`: emits a complete synchronized frame
+/// on the first frame (or dimension change), and only changed pixel runs on
+/// subsequent frames. Returns `""` when no pixels changed beyond the threshold.
+#[pyfunction]
+fn render_fill_diff_to_string(
+    py: Python,
+    img_array: PyReadonlyArray3<u8>,
+) -> PyResult<Py<PyString>> {
+    let array = img_array.as_array();
+    let shape = array.shape();
+    let rows = shape[0];
+    let cols = shape[1];
+    let channels = shape[2];
+    let contiguous = array.as_slice();
+    let capacity = fill_buffer_capacity(rows, cols).saturating_add(32);
+
+    with_reused_output_buffer(py, capacity, |output| {
+        PREV_FRAME_STATE.with(|state_cell| {
+            let mut state = state_cell.borrow_mut();
+            let need_full =
+                state.rows != rows || state.cols != cols || state.rgb.len() != rows * cols * 3;
+
+            if need_full {
+                output.push_str(SYNC_START);
+                output.push_str("\x1b[H");
+                if let Some(data) = contiguous {
+                    if channels >= 3 {
+                        render_fill_contiguous(output, data, rows, cols, channels);
+                    } else {
+                        for r in 0..rows {
+                            let mut prev_bg = None;
+                            for c in 0..cols {
+                                let rgb = read_rgb_packed(&array, None, cols, channels, r, c);
+                                push_fill_pixel(output, rgb, &mut prev_bg);
+                            }
+                            if cols > 0 {
+                                output.push_str("\x1b[0m\n");
+                            } else {
+                                output.push('\n');
+                            }
+                        }
+                    }
+                } else {
+                    for r in 0..rows {
+                        let mut prev_bg = None;
+                        for c in 0..cols {
+                            let rgb = read_rgb_packed(&array, None, cols, channels, r, c);
+                            push_fill_pixel(output, rgb, &mut prev_bg);
+                        }
+                        if cols > 0 {
+                            output.push_str("\x1b[0m\n");
+                        } else {
+                            output.push('\n');
+                        }
+                    }
+                }
+                output.push_str(SYNC_END);
+                state.rows = rows;
+                state.cols = cols;
+                store_rgb_frame(&mut state.rgb, &array, contiguous, rows, cols, channels);
+                return;
+            }
+
+            let mut prev_bg: Option<(u8, u8, u8)> = None;
+            let mut cur_pos: Option<(usize, usize)> = None;
+            let mut any_changed = false;
+
+            for r in 0..rows {
+                for c in 0..cols {
+                    let cur_rgb = read_rgb_packed(&array, contiguous, cols, channels, r, c);
+                    let prev_idx = (r * cols + c) * 3;
+                    let old_rgb = (
+                        state.rgb[prev_idx],
+                        state.rgb[prev_idx + 1],
+                        state.rgb[prev_idx + 2],
+                    );
+
+                    if !rgb_changed(cur_rgb, old_rgb, COLOR_DIFF_THRESHOLD) {
+                        continue;
+                    }
+
+                    if !any_changed {
+                        output.push_str(SYNC_START);
+                        any_changed = true;
+                    }
+
+                    if cur_pos != Some((r, c)) {
+                        push_cursor_pos(output, r + 1, c * 2 + 1);
+                    }
+
+                    push_fill_pixel(output, cur_rgb, &mut prev_bg);
+                    cur_pos = Some((r, c + 1));
+
+                    state.rgb[prev_idx] = cur_rgb.0;
+                    state.rgb[prev_idx + 1] = cur_rgb.1;
+                    state.rgb[prev_idx + 2] = cur_rgb.2;
+                }
+            }
+
+            if any_changed {
+                output.push_str("\x1b[0m");
+                output.push_str(SYNC_END);
+            }
+        });
+
+        Ok(())
+    })
+}
+
+/// Differential video renderer for `--fill-hd`: emits a complete synchronized
+/// half-block frame on the first frame (or dimension change), and only changed
+/// `(top, bottom)` cell pairs on subsequent frames. Returns `""` when unchanged.
+#[pyfunction]
+fn render_fill_hd_diff_to_string(
+    py: Python,
+    img_array: PyReadonlyArray3<u8>,
+) -> PyResult<Py<PyString>> {
+    let array = img_array.as_array();
+    let shape = array.shape();
+    let rows = shape[0];
+    let cols = shape[1];
+    let channels = shape[2];
+    let contiguous = array.as_slice();
+    let capacity = fill_hd_buffer_capacity(rows, cols).saturating_add(32);
+
+    with_reused_output_buffer(py, capacity, |output| {
+        PREV_FRAME_STATE.with(|state_cell| {
+            let mut state = state_cell.borrow_mut();
+            let need_full =
+                state.rows != rows || state.cols != cols || state.rgb.len() != rows * cols * 3;
+
+            if need_full {
+                output.push_str(SYNC_START);
+                output.push_str("\x1b[H");
+                if let Some(data) = contiguous {
+                    if channels >= 3 {
+                        render_fill_hd_contiguous(output, data, rows, cols, channels);
+                    } else {
+                        let mut r = 0;
+                        while r < rows {
+                            let bot_r = if r + 1 < rows { r + 1 } else { r };
+                            let mut prev_fg = None;
+                            let mut prev_bg = None;
+                            for c in 0..cols {
+                                let top = read_rgb_packed(&array, None, cols, channels, r, c);
+                                let bot = read_rgb_packed(&array, None, cols, channels, bot_r, c);
+                                push_fill_hd_cell(output, top, bot, &mut prev_fg, &mut prev_bg);
+                            }
+                            if cols > 0 {
+                                output.push_str("\x1b[0m\n");
+                            } else {
+                                output.push('\n');
+                            }
+                            r += 2;
+                        }
+                    }
+                } else {
+                    let mut r = 0;
+                    while r < rows {
+                        let bot_r = if r + 1 < rows { r + 1 } else { r };
+                        let mut prev_fg = None;
+                        let mut prev_bg = None;
+                        for c in 0..cols {
+                            let top = read_rgb_packed(&array, None, cols, channels, r, c);
+                            let bot = read_rgb_packed(&array, None, cols, channels, bot_r, c);
+                            push_fill_hd_cell(output, top, bot, &mut prev_fg, &mut prev_bg);
+                        }
+                        if cols > 0 {
+                            output.push_str("\x1b[0m\n");
+                        } else {
+                            output.push('\n');
+                        }
+                        r += 2;
+                    }
+                }
+                output.push_str(SYNC_END);
+                state.rows = rows;
+                state.cols = cols;
+                store_rgb_frame(&mut state.rgb, &array, contiguous, rows, cols, channels);
+                return;
+            }
+
+            let mut prev_fg: Option<(u8, u8, u8)> = None;
+            let mut prev_bg: Option<(u8, u8, u8)> = None;
+            let mut cur_pos: Option<(usize, usize)> = None;
+            let mut any_changed = false;
+
+            let mut r = 0;
+            let mut out_r = 0;
+            while r < rows {
+                let bot_r = if r + 1 < rows { r + 1 } else { r };
+                for c in 0..cols {
+                    let top = read_rgb_packed(&array, contiguous, cols, channels, r, c);
+                    let bot = read_rgb_packed(&array, contiguous, cols, channels, bot_r, c);
+
+                    let top_idx = (r * cols + c) * 3;
+                    let bot_idx = (bot_r * cols + c) * 3;
+                    let old_top = (
+                        state.rgb[top_idx],
+                        state.rgb[top_idx + 1],
+                        state.rgb[top_idx + 2],
+                    );
+                    let old_bot = (
+                        state.rgb[bot_idx],
+                        state.rgb[bot_idx + 1],
+                        state.rgb[bot_idx + 2],
+                    );
+
+                    if !rgb_changed(top, old_top, COLOR_DIFF_THRESHOLD)
+                        && !rgb_changed(bot, old_bot, COLOR_DIFF_THRESHOLD)
+                    {
+                        continue;
+                    }
+
+                    if !any_changed {
+                        output.push_str(SYNC_START);
+                        any_changed = true;
+                    }
+
+                    if cur_pos != Some((out_r, c)) {
+                        push_cursor_pos(output, out_r + 1, c + 1);
+                    }
+
+                    push_fill_hd_cell(output, top, bot, &mut prev_fg, &mut prev_bg);
+                    cur_pos = Some((out_r, c + 1));
+
+                    state.rgb[top_idx] = top.0;
+                    state.rgb[top_idx + 1] = top.1;
+                    state.rgb[top_idx + 2] = top.2;
+                    state.rgb[bot_idx] = bot.0;
+                    state.rgb[bot_idx + 1] = bot.1;
+                    state.rgb[bot_idx + 2] = bot.2;
+                }
+                r += 2;
+                out_r += 1;
+            }
+
+            if any_changed {
+                output.push_str("\x1b[0m");
+                output.push_str(SYNC_END);
+            }
+        });
+
+        Ok(())
+    })
+}
+
 #[pymodule]
 fn ascii_art_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(image_to_ascii_rs, m)?)?;
@@ -673,5 +1045,8 @@ fn ascii_art_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(render_grayscale_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(render_fill_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(render_fill_hd_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(render_fill_diff_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(render_fill_hd_diff_to_string, m)?)?;
+    m.add_function(wrap_pyfunction!(reset_diff_state, m)?)?;
     Ok(())
 }

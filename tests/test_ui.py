@@ -64,3 +64,13 @@ def test_print_header_clears_and_prints_banner(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "CLEARED" in output
     assert "ASCII ART GENERATOR" in output
+
+
+def test_hide_and_show_cursor_emit_expected_ansi_sequences(capsys):
+    ui.hide_cursor()
+    assert capsys.readouterr().out == "\033[?25l"
+
+    ui.show_cursor()
+    out = capsys.readouterr().out
+    assert "\033[?2026l" in out
+    assert "\033[?25h" in out

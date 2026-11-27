@@ -1,5 +1,7 @@
 # src/ascii_art/video_renderer.py
+import queue
 import sys
+import threading
 import time
 
 import cv2
@@ -11,16 +13,120 @@ from . import converter, image_resize, ui
 # Import Rust renderer
 try:
     from .ascii_art_rs import (
+        render_fill_diff_to_string,
+        render_fill_hd_diff_to_string,
         render_fill_hd_to_string,
         render_fill_to_string,
         render_frame_to_string,
         render_grayscale_to_string,
+        reset_diff_state,
     )
 except ImportError:
+    render_fill_diff_to_string = None
+    render_fill_hd_diff_to_string = None
     render_fill_hd_to_string = None
     render_fill_to_string = None
     render_frame_to_string = None
     render_grayscale_to_string = None
+    reset_diff_state = None
+
+# Keep references to the original Rust callables so tests that monkeypatch
+# render_fill_to_string / render_fill_hd_to_string continue to intercept calls.
+_ORIG_RENDER_FILL = render_fill_to_string
+_ORIG_RENDER_FILL_HD = render_fill_hd_to_string
+
+_SENTINEL = object()
+
+
+class _FramePrefetcher:
+    """Background producer that decodes, resizes, and color-converts video frames.
+
+    Because OpenCV's ``cap.read()``, ``cv2.resize()``, and ``cv2.cvtColor()``
+    release the Python GIL, running them on a worker thread overlaps decoding
+    frame N+1 with rendering, terminal I/O, and pacing for frame N.
+    """
+
+    def __init__(self, cap, target_w, target_h, needs_rgb, maxsize=2):
+        self._cap = cap
+        self._target_w = target_w
+        self._target_h = target_h
+        self._needs_rgb = needs_rgb
+        self._queue = queue.Queue(maxsize=maxsize)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name="asciify-video-prefetch", daemon=True
+        )
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def _run(self):
+        try:
+            while not self._stop.is_set():
+                ret, frame = self._cap.read()
+                if not ret:
+                    break
+
+                frame_resized = image_resize.resize_video_frame(
+                    frame,
+                    self._target_w,
+                    self._target_h,
+                )
+                if self._needs_rgb:
+                    frame_ready = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+                else:
+                    frame_ready = frame_resized
+
+                while not self._stop.is_set():
+                    try:
+                        self._queue.put(frame_ready, timeout=0.05)
+                        break
+                    except queue.Full:
+                        continue
+        finally:
+            # Always signal EOF so the consumer never blocks forever.
+            while True:
+                try:
+                    self._queue.put(_SENTINEL, timeout=0.05)
+                    break
+                except queue.Full:
+                    if self._stop.is_set():
+                        try:
+                            self._queue.get_nowait()
+                        except queue.Empty:
+                            pass
+
+    def get(self):
+        item = self._queue.get()
+        return None if item is _SENTINEL else item
+
+    def get_nowait_if_available(self):
+        """Non-blocking pop used when dropping stale frames to catch up."""
+        try:
+            item = self._queue.get_nowait()
+        except queue.Empty:
+            return False, None
+        if item is _SENTINEL:
+            return True, None
+        return True, item
+
+    def stop(self):
+        self._stop.set()
+        # Drain any pending item so the producer thread can exit immediately.
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        self._thread.join(timeout=1.0)
+
+
+def _prepare_frame(frame, target_w, target_h, needs_rgb):
+    frame_resized = image_resize.resize_video_frame(frame, target_w, target_h)
+    if needs_rgb:
+        return cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+    return frame_resized
 
 
 def play_video(filepath, args):
@@ -45,6 +151,9 @@ def play_video(filepath, args):
         print(f"❌ Error: Could not open video file '{filepath}'.")
         return
 
+    prefetcher = None
+    cursor_hidden = False
+
     try:
         # 1. Get Video Properties
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -52,8 +161,7 @@ def play_video(filepath, args):
             fps = 30.0
         frame_delay = 1.0 / fps
 
-        # 2. Decode the first frame.
-        # This frame is also rendered below; it isn't discarded.
+        # 2. Decode the first frame (used for dimensions AND rendered as frame 0).
         ret, first_frame = cap.read()
         if not ret:
             print("❌ Error: Video is empty or unreadable.")
@@ -126,13 +234,25 @@ def play_video(filepath, args):
                 print(f"Error: {e}")
                 return
 
+        # Select differential Rust renderer when available and not overridden
+        use_fill_hd_diff = (
+            fill_hd
+            and render_fill_hd_diff_to_string is not None
+            and render_fill_hd_to_string is _ORIG_RENDER_FILL_HD
+        )
+        use_fill_diff = (
+            fill
+            and render_fill_diff_to_string is not None
+            and render_fill_to_string is _ORIG_RENDER_FILL
+        )
+
         # Check for Rust support
-        if fill_hd and render_fill_hd_to_string is None:
+        if fill_hd and not use_fill_hd_diff and render_fill_hd_to_string is None:
             print(
                 "❌ Error: Rust extension not found. Build with 'maturin develop'."
             )
             return
-        if fill and render_fill_to_string is None:
+        if fill and not use_fill_diff and render_fill_to_string is None:
             print(
                 "❌ Error: Rust extension not found. Build with 'maturin develop'."
             )
@@ -143,84 +263,83 @@ def play_video(filepath, args):
             )
             return
 
-        ui.clear_terminal()
+        if (use_fill_diff or use_fill_hd_diff) and reset_diff_state is not None:
+            reset_diff_state()
 
-        # Render the first frame that was already decoded.
-        frame = first_frame
+        ui.clear_terminal()
+        ui.hide_cursor()
+        cursor_hidden = True
+
+        # Prepare frame 0 and start background decode/resize thread for frames 1+.
+        frame_for_render = _prepare_frame(first_frame, target_w, target_h, needs_rgb)
+        prefetcher = _FramePrefetcher(
+            cap, target_w, target_h, needs_rgb, maxsize=2
+        ).start()
+
+        next_frame_at = time.monotonic() + frame_delay
 
         while True:
-            start_time = time.monotonic()
+            if use_fill_hd_diff:
+                # Differential renderer already embeds DEC 2026 sync markers.
+                output_str = render_fill_hd_diff_to_string(frame_for_render)
+                if output_str:
+                    sys.stdout.write(output_str)
+                    sys.stdout.flush()
 
-            frame_resized = image_resize.resize_video_frame(
-                frame,
-                target_w,
-                target_h,
-            )
-
-            if needs_rgb:
-                frame_for_render = cv2.cvtColor(
-                    frame_resized,
-                    cv2.COLOR_BGR2RGB,
-                )
-            else:
-                # Grayscale conversion uses max(B, G, R), so BGR is already
-                # in the correct representation for this operation.
-                frame_for_render = frame_resized
-
-            ui.move_cursor_home()
-
-            if fill_hd:
-                output_str = render_fill_hd_to_string(frame_for_render)
-                sys.stdout.write(output_str)
-
-            elif fill:
-                output_str = render_fill_to_string(frame_for_render)
-                sys.stdout.write(output_str)
-
-            elif args.color:
-                output_str = render_frame_to_string(
-                    frame_for_render,
-                    chars_list,
-                )
-                sys.stdout.write(output_str)
-
-            elif render_grayscale_to_string is not None:
-                # Rust performs both grayscale character mapping and terminal
-                # formatting directly from the resized OpenCV BGR frame.
-                output_str = render_grayscale_to_string(
-                    frame_for_render,
-                    chars_list,
-                )
-                sys.stdout.write(output_str)
+            elif use_fill_diff:
+                output_str = render_fill_diff_to_string(frame_for_render)
+                if output_str:
+                    sys.stdout.write(output_str)
+                    sys.stdout.flush()
 
             else:
-                # Python fallback for source checkouts without the optional
-                # Rust extension.
-                pil_frame = Image.fromarray(frame_for_render)
+                if fill_hd:
+                    body = render_fill_hd_to_string(frame_for_render)
+                elif fill:
+                    body = render_fill_to_string(frame_for_render)
+                elif args.color:
+                    body = render_frame_to_string(frame_for_render, chars_list)
+                elif render_grayscale_to_string is not None:
+                    body = render_grayscale_to_string(frame_for_render, chars_list)
+                else:
+                    pil_frame = Image.fromarray(frame_for_render)
+                    ascii_grid = converter.image_to_ascii(pil_frame, chars_str)
+                    body = "\n".join(
+                        "".join(char + " " for char in row) for row in ascii_grid
+                    )
 
-                ascii_grid = converter.image_to_ascii(
-                    pil_frame,
-                    chars_str,
-                )
+                # Single atomic write wrapped in DEC Mode 2026 synchronized output.
+                sys.stdout.write(f"{ui.SYNC_START}{ui.CURSOR_HOME}{body}{ui.SYNC_END}")
+                sys.stdout.flush()
 
-                output_buffer = []
+            # Deadline-based pacing (accounts for decode + render + PTY write).
+            now = time.monotonic()
+            sleep_time = next_frame_at - now
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+                next_frame_at += frame_delay
+            else:
+                # Behind schedule: still yield briefly and drop stale queued
+                # frames if more than one full frame behind to stay in sync.
+                time.sleep(0)
+                if now - next_frame_at > frame_delay:
+                    while now - next_frame_at > frame_delay:
+                        popped, dropped = prefetcher.get_nowait_if_available()
+                        if not popped:
+                            next_frame_at = now + frame_delay
+                            break
+                        if dropped is None:
+                            # Hit EOF while catching up.
+                            frame_for_render = None
+                            break
+                        next_frame_at += frame_delay
+                    if frame_for_render is None:
+                        break
+                else:
+                    next_frame_at += frame_delay
 
-                for row in ascii_grid:
-                    row_parts = [char + " " for char in row]
-                    output_buffer.append("".join(row_parts))
-
-                sys.stdout.write("\n".join(output_buffer))
-
-            sys.stdout.flush()
-
-            process_time = time.monotonic() - start_time
-            sleep_time = max(0, frame_delay - process_time)
-            time.sleep(sleep_time)
-
-            # Only now read the next frame.
-            ret, frame = cap.read()
-
-            if not ret:
+            frame_for_render = prefetcher.get()
+            if frame_for_render is None:
                 break
 
     except KeyboardInterrupt:
@@ -228,4 +347,10 @@ def play_video(filepath, args):
         print("\nStopped.")
 
     finally:
+        if prefetcher is not None:
+            prefetcher.stop()
+        if (fill or fill_hd) and reset_diff_state is not None:
+            reset_diff_state()
+        if cursor_hidden:
+            ui.show_cursor()
         cap.release()

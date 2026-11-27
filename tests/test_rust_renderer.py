@@ -183,3 +183,63 @@ def test_rust_fill_renderers_preserve_output_for_non_contiguous_arrays():
 
     assert rust.render_fill_to_string(view) == rust.render_fill_to_string(contiguous)
     assert rust.render_fill_hd_to_string(view) == rust.render_fill_hd_to_string(contiguous)
+
+
+def test_render_fill_diff_to_string_skips_unchanged_and_jitter_pixels():
+    rust = load_rust_module()
+    rust.reset_diff_state()
+
+    frame1 = np.array(
+        [[[10, 20, 30], [40, 50, 60]]],
+        dtype=np.uint8,
+    )
+    out1 = rust.render_fill_diff_to_string(frame1)
+    assert out1.startswith("\033[?2026h\033[H")
+    assert out1.endswith("\033[?2026l")
+
+    # Identical frame -> zero bytes emitted
+    assert rust.render_fill_diff_to_string(frame1) == ""
+
+    # Sub-threshold compression jitter (delta <= 4) -> zero bytes emitted
+    jitter = np.array(
+        [[[12, 19, 32], [41, 48, 60]]],
+        dtype=np.uint8,
+    )
+    assert rust.render_fill_diff_to_string(jitter) == ""
+
+    # Second pixel changes significantly -> only second pixel (col 3) redrawn
+    frame2 = np.array(
+        [[[10, 20, 30], [200, 10, 10]]],
+        dtype=np.uint8,
+    )
+    out2 = rust.render_fill_diff_to_string(frame2)
+    assert out2 == "\033[?2026h\033[1;3H\033[48;2;200;10;10m  \033[0m\033[?2026l"
+
+    # Reset forces a full synchronized redraw again
+    rust.reset_diff_state()
+    out3 = rust.render_fill_diff_to_string(frame2)
+    assert out3.startswith("\033[?2026h\033[H")
+
+
+def test_render_fill_hd_diff_to_string_updates_only_changed_cells():
+    rust = load_rust_module()
+    rust.reset_diff_state()
+
+    frame1 = np.array(
+        [
+            [[10, 20, 30], [50, 50, 50]],
+            [[40, 50, 60], [50, 50, 50]],
+        ],
+        dtype=np.uint8,
+    )
+    out1 = rust.render_fill_hd_diff_to_string(frame1)
+    assert out1.startswith("\033[?2026h\033[H")
+    assert rust.render_fill_hd_diff_to_string(frame1) == ""
+
+    # Change only column 2's bottom pixel
+    frame2 = frame1.copy()
+    frame2[1, 1] = [200, 100, 50]
+    out2 = rust.render_fill_hd_diff_to_string(frame2)
+    assert out2 == "\033[?2026h\033[1;2H\033[38;2;50;50;50;48;2;200;100;50m▀\033[0m\033[?2026l"
+
+    rust.reset_diff_state()

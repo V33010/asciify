@@ -4,6 +4,13 @@ import time
 
 CONFIG = {"animate": True}
 
+# DEC Mode 2026 synchronized output + cursor control sequences
+SYNC_START = "\033[?2026h"
+SYNC_END = "\033[?2026l"
+CURSOR_HOME = "\033[H"
+CURSOR_HIDE = "\033[?25l"
+CURSOR_SHOW = "\033[?25h"
+
 
 def cool_print(string):
     if CONFIG["animate"]:
@@ -34,7 +41,17 @@ def move_cursor_home():
     Moves cursor to (0,0) without clearing the screen.
     Used for video rendering to overwrite the previous frame.
     """
-    print("\033[H", end="")
+    print(CURSOR_HOME, end="")
+
+
+def hide_cursor():
+    """Hides the terminal cursor during video playback to prevent flicker."""
+    print(CURSOR_HIDE, end="", flush=True)
+
+
+def show_cursor():
+    """Restores the terminal cursor and ends any active synchronized update."""
+    print(f"{SYNC_END}{CURSOR_SHOW}", end="", flush=True)
 
 
 def print_header():
