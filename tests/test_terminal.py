@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from ascii_art import terminal
+from ascii_art import terminal, ui
 
 
 def make_args(**overrides):
@@ -125,7 +125,7 @@ def test_terminal_pipeline_renders_color_directly_with_rust(monkeypatch, tmp_pat
         terminal.converter, "image_to_ascii_with_color", unexpected_color_grid
     )
     monkeypatch.setattr(
-        terminal.ui, "get_ansi_colored_string", unexpected_color_grid
+        ui, "get_ansi_colored_string", unexpected_color_grid
     )
 
     terminal.run_terminal_pipeline(
@@ -328,3 +328,29 @@ def test_terminal_invalid_charset_exits(tmp_path, monkeypatch, capsys):
         )
     assert exc.value.code == 1
     assert "bad charset" in capsys.readouterr().out
+
+
+def test_terminal_routes_video_url_with_query_string(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        terminal.video_renderer,
+        "play_video",
+        lambda path, args: calls.append((path, args)),
+    )
+
+    url = "https://example.com/clip.mp4?token=abc123"
+    args = make_args(input_file=url)
+    terminal.run_terminal_pipeline(args)
+
+    assert calls == [(url, args)]
+
+
+def test_terminal_rejects_downsize_producing_zero_dimension(tmp_path, capsys):
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (4, 4)).save(image_path)
+    with pytest.raises(SystemExit) as exc:
+        terminal.run_terminal_pipeline(
+            make_args(input_file=str(image_path), downsize=100)
+        )
+    assert exc.value.code == 1
+    assert "non-zero dimensions" in capsys.readouterr().out

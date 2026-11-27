@@ -247,9 +247,11 @@ def test_play_video_should_release_capture_on_empty_video(monkeypatch):
     assert cap.released is True
 
 
-def test_play_video_should_reject_negative_downsize(monkeypatch):
+def test_play_video_should_reject_negative_downsize(monkeypatch, capsys):
     cap = FakeCapture([make_frame(10), make_frame(20)])
     monkeypatch.setattr(video_renderer.cv2, "VideoCapture", lambda path: cap)
     video_renderer.play_video(
         "video.mp4", make_args(width=None, height=None, downsize=-2)
     )
+    assert "positive number" in capsys.readouterr().out
+    assert cap.released is True

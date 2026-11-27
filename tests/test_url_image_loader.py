@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from io import BytesIO
-
 import pytest
 
 from ascii_art import url_image_loader
@@ -159,10 +157,6 @@ def test_missing_extension_with_parameterized_png_content_type_uses_safe_default
 
 
 def test_http_error_returns_none(monkeypatch, capsys):
-    class FakeHTTPError(Exception):
-        code = 404
-        reason = "Not Found"
-
     # urllib.error.HTTPError is a concrete exception and can be raised directly.
     err = __import__("urllib.error", fromlist=["HTTPError"]).HTTPError(
         "https://example.com/a.png", 404, "Not Found", {}, None
@@ -189,14 +183,13 @@ def test_url_error_returns_none(monkeypatch, capsys):
     assert "Network Error" in capsys.readouterr().out
 
 
-def test_missing_extension_parameterized_png_should_use_png_extension(monkeypatch):
-    fake = FakeResponse(
-        b"abc",
-        headers={"Content-Type": "image/png; charset=utf-8", "Content-Length": "3"},
-    )
+def test_missing_content_type_and_extension_falls_back_to_jpg(monkeypatch):
+    fake = FakeResponse(b"abc", headers={"Content-Length": "3"})
     monkeypatch.setattr(
         url_image_loader.urllib.request, "urlopen", lambda *args, **kwargs: fake
     )
 
-    _, filename = url_image_loader.download_image("https://example.com/no-extension")
-    assert filename == "downloaded_image.png"
+    data, filename = url_image_loader.download_image("https://example.com/no-extension")
+    assert data is not None
+    assert data.read() == b"abc"
+    assert filename == "downloaded_image.jpg"

@@ -7,13 +7,7 @@ The suite is designed to run from a source checkout and does not require the Rus
 From the repository root:
 
 ```bash
-uv pip install pytest coverage
-```
-
-`bump_version.py` imports the third-party `toml` package, but the current `pyproject.toml` does not declare it. To exercise the release-version tests as well, install it too:
-
-```bash
-uv pip install toml
+uv sync --group dev
 ```
 
 ## Run everything

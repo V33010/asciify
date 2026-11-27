@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -35,9 +36,10 @@ def tag_exists(tag):
 
 
 def run(command):
-    """Run a shell command with logging"""
-    print(f"$ {command}")
-    subprocess.run(command, shell=True, check=True)
+    """Run a command without invoking a shell."""
+    args = shlex.split(command) if isinstance(command, str) else list(command)
+    print(f"$ {' '.join(args)}")
+    subprocess.run(args, shell=False, check=True)
 
 
 def main():

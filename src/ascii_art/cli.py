@@ -1,12 +1,12 @@
 # src/ascii_art/cli.py
 import argparse
-import os
 import sys
 from pathlib import Path
 
 from . import charset as charset_mod
 from . import (converter, image_loader, image_resize, server, terminal, ui,
                writer)
+from .__version__ import __version__
 
 
 def parse_args():
@@ -14,8 +14,16 @@ def parse_args():
         description="Asciify: Terminal-first ASCII Art Generator", add_help=True
     )
 
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+
     # --- INPUT ---
-    parser.add_argument("-i", "--input-file", help="Path to input image file")
+    parser.add_argument(
+        "-i",
+        "--input-file",
+        help="Path to local image/video file or URL (http://...)",
+    )
 
     # --- MODE SWITCH ---
     parser.add_argument(
@@ -47,7 +55,9 @@ def parse_args():
     )
     parser.add_argument("--set-charset", help="Set the default charset for future runs")
     parser.add_argument(
-        "-c", "--charset", help="Use a specific charset string for this run"
+        "-c",
+        "--charset",
+        help="Built-in charset name or custom character string for this run",
     )
 
     # --- LEGACY/FULL MODE ONLY ---
@@ -139,7 +149,6 @@ def main():
 
     # --- 1. CHECK FOR NO ARGS ---
     if len(sys.argv) == 1:
-        # "python -m src.ascii_art -> this will DO NOTHING, AND JUST THROW AN ERROR"
         print("Error: No arguments provided.")
         print("Usage: asciify -i <input_file> [options]")
         print("Try 'asciify --help' for details.")

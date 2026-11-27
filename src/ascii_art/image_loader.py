@@ -6,8 +6,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import url_image_loader  # Import new handler
-from .ui import clear_terminal, cool_print
+from . import url_image_loader
+from .ui import cool_print
 
 # --- SMART PATHING LOGIC ---
 REPO_INPUT = Path("assets/input")
@@ -68,7 +68,14 @@ def _smart_preview(path):
     if shutil.which("powershell.exe"):
         try:
             subprocess.run(
-                ["powershell.exe", "-c", "start", f"'{path_str}'"],
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    "Start-Process",
+                    "-FilePath",
+                    path_str,
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -81,8 +88,8 @@ def _smart_preview(path):
         return False
 
     try:
-        img = Image.open(path)
-        img.show()
+        with Image.open(path) as img:
+            img.show()
         return True
     except Exception:
         return False

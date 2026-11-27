@@ -11,11 +11,18 @@ def calculate_dimensions(img, target_w=None, target_h=None, ratio=None):
     orig_w, orig_h = img.size
     orig_ratio = orig_w / orig_h
 
+    if target_w is not None and target_w <= 0:
+        raise ValueError(f"Target width must be positive, got {target_w}.")
+    if target_h is not None and target_h <= 0:
+        raise ValueError(f"Target height must be positive, got {target_h}.")
+    if ratio is not None and ratio <= 0:
+        raise ValueError(f"Aspect ratio must be positive, got {ratio}.")
+
     if target_w and target_h and ratio:
         calc_ratio = target_w / target_h
         if abs(calc_ratio - ratio) > 0.01:
             raise ValueError(
-                f"Conflict: Width ({target_w}) and Height ({target_h}) imply ratio {calc_ratio:.2f}, but --ratio {ratio} was provided."
+                f"Conflict: Width ({target_w}) and Height ({target_h}) imply ratio {calc_ratio:.2f}, but --aspect-ratio {ratio} was provided."
             )
 
     if target_w and target_h:
@@ -23,11 +30,11 @@ def calculate_dimensions(img, target_w=None, target_h=None, ratio=None):
 
     if target_w:
         r = ratio if ratio else orig_ratio
-        return target_w, int(target_w / r)
+        return target_w, max(1, int(target_w / r))
 
     if target_h:
         r = ratio if ratio else orig_ratio
-        return int(target_h * r), target_h
+        return max(1, int(target_h * r)), target_h
 
     return None, None
 
@@ -68,7 +75,6 @@ def interactive_downsize_factor(img, bypass_downsizing=False):
             else:
                 if n < 1:
                     cool_print("Factor 'n' must be >= 1 (Downsizing only).\n")
-                    cool_print("Use --bypass-downsizing flag to allow upscaling.\n")
                     continue
 
             new_w = int(orig_w / n)
@@ -117,7 +123,7 @@ def get_auto_terminal_dimensions(img):
     n_width = iw / max_w
 
     # 5. Calculate "n" needed to fit Height
-    # Formula: new_h = (ih / n) * 0.5  =>  n = (ih * 0.5) / new_h
+    # Formula: new_h = (ih / n) * FONT_ASPECT_CORRECTION  =>  n = (ih * FONT_ASPECT_CORRECTION) / new_h
     n_height = (ih * FONT_ASPECT_CORRECTION) / max_h
 
     # 6. Determine Final 'n'

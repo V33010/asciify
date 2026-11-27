@@ -1,5 +1,5 @@
 [build-system]
-requires = [ "maturin>=1.0,<2.0",]
+requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
@@ -8,12 +8,10 @@ version = "0.5.0"
 description = "A hybrid CLI tool for ASCII art generation with terminal and web preview modes."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [ 
-    "maturin>=1.11.2",
+dependencies = [
     "numpy>=2.0.0",
-    "opencv-python>=4.11.0.86", 
+    "opencv-python>=4.11.0.86",
     "pillow>=10.0.0",
-    "toml>=0.10.2",
 ]
 
 [[project.authors]]
@@ -33,7 +31,11 @@ Homepage = "https://github.com/V33010/asciify"
 module-name = "ascii_art.ascii_art_rs"
 python-source = "src"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
+    "maturin>=1.11.2",
     "pytest>=9.1.1",
 ]

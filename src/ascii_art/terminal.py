@@ -1,10 +1,10 @@
 # src/ascii_art/terminal.py
-import shutil
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from . import charset as charset_mod
-from . import converter, image_loader, image_resize, ui, video_renderer, writer
+from . import converter, image_loader, image_resize, video_renderer, writer
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv"}
 
@@ -17,7 +17,7 @@ def run_terminal_pipeline(args):
 
     # --- 1. CHARSET OPERATIONS ---
     if hasattr(args, "show_charsets") and args.show_charsets:
-        print(f"\nAvailable Charsets:")
+        print("\nAvailable Charsets:")
         for name, chars in charset_mod.CHARSETS.items():
             print(f"  • {name:<15} : {chars}")
         print()
@@ -48,10 +48,8 @@ def run_terminal_pipeline(args):
         if p.suffix.lower() in VIDEO_EXTENSIONS:
             is_video = True
     else:
-        # Simple heuristic for URLs ending in video extensions
-        # (Perfect detection would require HEAD request, but this suffices for CLI)
-        lower_url = input_str.lower()
-        if any(lower_url.endswith(ext) for ext in VIDEO_EXTENSIONS):
+        url_path = urlparse(input_str).path.lower()
+        if any(url_path.endswith(ext) for ext in VIDEO_EXTENSIONS):
             is_video = True
 
     # --- 3. VIDEO BRANCH ---
@@ -69,7 +67,7 @@ def run_terminal_pipeline(args):
         video_renderer.play_video(input_str, args)
         return
 
-    # --- 4. IMAGE BRANCH (Existing Logic) ---
+    # --- 4. IMAGE BRANCH ---
     img = None
     original_path_obj = None
 
@@ -122,8 +120,12 @@ def run_terminal_pipeline(args):
                 raise ValueError
             target_w = int(img.width / factor)
             target_h = int(img.height / factor)
+            if target_w < 1 or target_h < 1:
+                raise ValueError
         except ValueError:
-            print("Error: --downsize must be a positive number.")
+            print(
+                "Error: --downsize must be a positive number that produces non-zero dimensions."
+            )
             sys.exit(1)
 
     else:
@@ -143,7 +145,7 @@ def run_terminal_pipeline(args):
     should_save = any([args.save, args.output_folder, args.output_file_name, args.html])
 
     # --- 9. CONVERSION + OUTPUT TO TERMINAL ---
-    # Terminal rendering now uses Rust for both color and grayscale when the
+    # Terminal rendering uses Rust for both color and grayscale when the
     # extension is available, avoiding Python per-character formatting and
     # Python per-pixel ASCII conversion. Save operations still build the
     # structured Python grid separately because writer.py consumes that format.

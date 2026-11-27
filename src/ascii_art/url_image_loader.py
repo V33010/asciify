@@ -10,16 +10,17 @@ MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024  # 10 MB Limit
 TIMEOUT_SECONDS = 10
 USER_AGENT = "Asciify-Term-CLI/1.0"
 
-# List of allowed MIME types to prevent downloading malware/junk
-ALLOWED_MIME_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-    "image/tiff",
-    "image/x-icon",
+# Allowed MIME types and their fallback file extensions
+MIME_TO_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/x-icon": ".ico",
 }
+ALLOWED_MIME_TYPES = set(MIME_TO_EXT)
 
 
 def download_image(url):
@@ -49,22 +50,25 @@ def download_image(url):
 
             # --- SECURITY CHECK: Content-Length ---
             content_length = response.getheader("Content-Length")
-            if content_length and int(content_length) > MAX_DOWNLOAD_SIZE:
-                print(
-                    f"❌ Error: Image too large ({int(content_length) / 1024 / 1024:.2f} MB). Max is 10 MB."
-                )
-                return None, None
+            if content_length:
+                try:
+                    declared_size = int(content_length)
+                except ValueError:
+                    declared_size = None
+                if declared_size is not None and declared_size > MAX_DOWNLOAD_SIZE:
+                    print(
+                        f"❌ Error: Image too large ({declared_size / 1024 / 1024:.2f} MB). Max is 10 MB."
+                    )
+                    return None, None
 
             # --- SECURITY CHECK: Content-Type ---
             # Verify the server actually claims this is an image
+            mime_type = ""
             content_type = response.getheader("Content-Type")
             if content_type:
                 # Clean up header (e.g., "image/png; charset=utf-8" -> "image/png")
                 mime_type = content_type.split(";")[0].strip().lower()
                 if mime_type not in ALLOWED_MIME_TYPES:
-                    # Allow generic 'application/octet-stream' only if we really trust it,
-                    # but for 'watertight' security, we usually block it.
-                    # We will be strict here.
                     print(
                         f"❌ Error: Invalid Content-Type '{mime_type}'. Expected an image."
                     )
@@ -94,21 +98,7 @@ def download_image(url):
 
             # Sanity check: If filename is empty or has no extension, fallback
             if not filename or "." not in filename:
-                # Try to guess extension from content-type
-                ext = ".jpg"  # default
-                if mime_type == "image/png":
-                    ext = ".png"
-                elif mime_type == "image/webp":
-                    ext = ".webp"
-                elif mime_type == "image/gif":
-                    ext = ".gif"
-                elif mime_type == "image/bmp":
-                    ext = ".bmp"
-                elif mime_type == "image/tiff":
-                    ext = ".tiff"
-                elif mime_type == "image/x-icon":
-                    ext = ".ico"
-
+                ext = MIME_TO_EXT.get(mime_type, ".jpg")
                 filename = f"downloaded_image{ext}"
 
             return img_data, filename

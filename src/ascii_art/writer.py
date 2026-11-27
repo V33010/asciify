@@ -18,7 +18,7 @@ def generate_html(ascii_grid):
     """Generates an HTML string from the ASCII grid."""
     lines = []
     lines.append("<!DOCTYPE html>")
-    lines.append("<html><head><style>")
+    lines.append('<html><head><meta charset="utf-8"><style>')
     lines.append(
         "body { background-color: #000; color: #fff; font-family: monospace; white-space: pre; line-height: 1.0; }"
     )
@@ -85,7 +85,7 @@ def save_art(
         final_filename = f"{output_name}{extension}"
     else:
         # Auto-generate name based on input file
-        base_name = clean_filename(Path(original_filename).name)
+        base_name = clean_filename(Path(original_filename).name) or "image"
         final_filename = f"ascii_{base_name}_{timestamp}{extension}"
 
     filepath = target_dir / final_filename

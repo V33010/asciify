@@ -1,6 +1,5 @@
 # src/ascii_art/ui.py
 import os
-import sys
 import time
 
 CONFIG = {"animate": True}
@@ -44,7 +43,7 @@ def print_header():
 
 
 def get_ansi_colored_string(char, r, g, b):
-    """
+    r"""
     Returns the character wrapped in TrueColor (24-bit) ANSI escape codes.
     Format: \033[38;2;R;G;Bm{char}\033[0m
     """

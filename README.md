@@ -1,7 +1,7 @@
 # Asciify Term
 
 ![PyPI - Version](https://img.shields.io/pypi/v/asciify-term?style=flat-square&color=blue)
-![Python](https://img.shields.io/badge/python-3.12-blue?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.12+-blue?style=flat-square)
 ![Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/asciify-term?style=flat-square)
@@ -144,10 +144,11 @@ asciify --full
 | --height | Set target height. |
 | --aspect-ratio | Force specific aspect ratio. |
 | --downsize | Downsize image by factor n. |
-| -c, --charset | Use specific charset string. |
+| -c, --charset | Built-in charset name or custom character string. |
 | --show-charsets | List all built-in charsets. |
 | --set-charset | Set default charset preference. |
 | --full | Launch legacy interactive mode. |
+| -V, --version | Show installed version and exit. |
 
 ## License
 

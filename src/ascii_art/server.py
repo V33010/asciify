@@ -48,7 +48,13 @@ def open_browser_silently(url):
     if shutil.which("powershell.exe"):
         try:
             subprocess.run(
-                ["powershell.exe", "-c", "start", f"'{url}'"],
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    "Start-Process",
+                    url,
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -71,7 +77,7 @@ def start_server_and_open_browser(filepath):
 
     # If server is already running, just open browser
     if SERVER_STATE["is_running"]:
-        cool_print(f"Server already running. Updating content...\n")
+        cool_print("Server already running. Updating content...\n")
         cool_print(f"Opening browser at: {url}\n")
         open_browser_silently(url)
         return
@@ -80,7 +86,7 @@ def start_server_and_open_browser(filepath):
     def run_server():
         socketserver.TCPServer.allow_reuse_address = True
         try:
-            with socketserver.TCPServer(("", PORT), DynamicFileHandler) as httpd:
+            with socketserver.TCPServer(("127.0.0.1", PORT), DynamicFileHandler) as httpd:
                 SERVER_STATE["is_running"] = True
                 httpd.serve_forever()
         except OSError as e:

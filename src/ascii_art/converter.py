@@ -18,20 +18,22 @@ def image_to_ascii(img, charset):
     """
     Converts a PIL image to a 2D list of characters (Grayscale).
     """
-    arr = np.array(img)
+    if not charset:
+        raise ValueError("Charset must be a non-empty string.")
+
+    arr = np.asarray(img)
 
     # Handle dimensions (Height, Width)
-    if len(arr.shape) == 3:
+    if arr.ndim == 3:
         gray_arr = np.max(arr[:, :, :3], axis=2)
     else:
         gray_arr = arr
 
-    scale = (len(charset) - 1) / 255
-    indices = (gray_arr * scale).astype(int)
+    indices = (gray_arr.astype(np.uint16) * (len(charset) - 1)) // 255
 
     ascii_grid = []
     for row in indices:
-        ascii_row = [charset[i] for i in row]
+        ascii_row = [charset[int(i)] for i in row]
         ascii_grid.append(ascii_row)
 
     return ascii_grid
@@ -49,6 +51,9 @@ def render_image_to_string(img, charset):
         raise ImportError(
             "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
         )
+
+    if not charset:
+        raise ValueError("Charset must be a non-empty string.")
 
     img_rgb = img if img.mode == "RGB" else img.convert("RGB")
     arr = np.asarray(img_rgb)
@@ -86,9 +91,12 @@ def image_to_ascii_with_color(img, charset):
             "Rust extension 'ascii_art_rs' not found. Please build with 'maturin develop'."
         )
 
+    if not charset:
+        raise ValueError("Charset must be a non-empty string.")
+
     # Ensure image is RGB to guarantee 3 channels
-    img_rgb = img.convert("RGB")
-    arr = np.array(img_rgb)
+    img_rgb = img if img.mode == "RGB" else img.convert("RGB")
+    arr = np.asarray(img_rgb)
 
     # Convert the string "abc" into a list ["a", "b", "c"]
     # Rust expects a Vec<String>, so we must provide a Python List of strings.

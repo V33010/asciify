@@ -51,7 +51,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ascii_art import converter, image_resize, ui, video_renderer  # noqa: E402
+from ascii_art import converter, image_resize, video_renderer  # noqa: E402
 from ascii_art.charset import CHARSETS, get_charset  # noqa: E402
 
 

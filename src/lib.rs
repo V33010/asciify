@@ -89,7 +89,7 @@ where
 
         render(&mut output)?;
 
-        Ok(PyString::new_bound(py, output.as_str()).unbind())
+        Ok(PyString::new(py, output.as_str()).unbind())
     })
 }
 
@@ -176,7 +176,6 @@ fn render_color_contiguous(
 /// Returns: List[List[(char, (r, g, b))]]
 #[pyfunction]
 fn image_to_ascii_rs(
-    _py: Python,
     img_array: PyReadonlyArray3<u8>,
     charset: Vec<String>,
 ) -> PyResult<Vec<Vec<(String, (u8, u8, u8))>>> {
@@ -398,7 +397,7 @@ fn render_grayscale_to_string(
 }
 
 #[pymodule]
-fn ascii_art_rs(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn ascii_art_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(image_to_ascii_rs, m)?)?;
     m.add_function(wrap_pyfunction!(render_frame_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(render_grayscale_to_string, m)?)?;

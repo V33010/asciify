@@ -87,7 +87,6 @@ def test_main_routes_full_mode_to_legacy_loop(monkeypatch):
 
 
 def test_legacy_mode_rejects_missing_input_file(monkeypatch):
-    args = cli.parse_args() if False else None
     monkeypatch.setattr(sys, "argv", ["asciify", "--full", "-i", "/does/not/exist"])
     parsed = cli.parse_args()
     with pytest.raises(SystemExit) as exc:
@@ -99,7 +98,7 @@ def test_legacy_mode_happy_path_runs_full_workflow(monkeypatch, tmp_path):
     image_path = tmp_path / "image.png"
     from PIL import Image
     Image.new("RGB", (4, 2)).save(image_path)
-    args = cli.parse_args() if False else type("Args", (), {
+    args = type("Args", (), {
         "no_animate": True,
         "input_file": str(image_path),
         "no_preview": True,
@@ -124,3 +123,11 @@ def test_legacy_mode_happy_path_runs_full_workflow(monkeypatch, tmp_path):
         assert cli.ui.CONFIG["animate"] is False
     finally:
         cli.ui.CONFIG["animate"] = old_animate
+
+
+def test_parse_args_version_flag_prints_version_and_exits(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["asciify", "--version"])
+    with pytest.raises(SystemExit) as exc:
+        cli.parse_args()
+    assert exc.value.code == 0
+    assert cli.__version__ in capsys.readouterr().out

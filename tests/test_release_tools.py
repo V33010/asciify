@@ -5,37 +5,22 @@ from pathlib import Path
 
 import pytest
 
-try:
-    import bump_version
-except ModuleNotFoundError as exc:
-    bump_version = None
-    BUMP_IMPORT_ERROR = exc
-else:
-    BUMP_IMPORT_ERROR = None
-
+import bump_version
 import tag_release
 
-bump_skip = pytest.mark.skipif(
-    bump_version is None,
-    reason=f"bump_version.py cannot import: {BUMP_IMPORT_ERROR}",
-)
 
-
-@bump_skip
 def test_bump_version_helpers():
     assert bump_version.bump_patch("1.2.3") == "1.2.4"
     assert bump_version.bump_minor("1.2.3") == "1.3.0"
     assert bump_version.bump_major("1.2.3") == "2.0.0"
 
 
-@bump_skip
 def test_read_current_version(tmp_path):
     path = tmp_path / "pyproject.toml"
     path.write_text('[project]\nversion = "9.8.7"\n', encoding="utf-8")
     assert bump_version.read_current_version(path) == "9.8.7"
 
 
-@bump_skip
 def test_write_new_version_updates_pyproject_cargo_and_version_file(tmp_path, capsys):
     pyproject = tmp_path / "pyproject.toml"
     cargo = tmp_path / "Cargo.toml"
@@ -55,7 +40,6 @@ def test_write_new_version_updates_pyproject_cargo_and_version_file(tmp_path, ca
     assert "Updated Cargo.toml" in output
 
 
-@bump_skip
 def test_write_new_version_handles_missing_cargo_and_missing_package(tmp_path, capsys):
     pyproject = tmp_path / "pyproject.toml"
     cargo = tmp_path / "Cargo.toml"
@@ -69,7 +53,6 @@ def test_write_new_version_handles_missing_cargo_and_missing_package(tmp_path, c
     assert "[package] section not found" in capsys.readouterr().out
 
 
-@bump_skip
 def test_confirm_bump_accepts_y_yes_and_rejects_other_values(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
     assert bump_version.confirm_bump("1.0.0", "1.1.0") is True
@@ -79,7 +62,6 @@ def test_confirm_bump_accepts_y_yes_and_rejects_other_values(monkeypatch):
     assert bump_version.confirm_bump("1.0.0", "1.1.0") is False
 
 
-@bump_skip
 def test_manual_mode_does_nothing_for_blank_or_same_version(
     monkeypatch, tmp_path, capsys
 ):
@@ -92,7 +74,6 @@ def test_manual_mode_does_nothing_for_blank_or_same_version(
     assert "No change made" in capsys.readouterr().out
 
 
-@bump_skip
 def test_bump_version_main_unknown_command(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
@@ -136,7 +117,7 @@ def test_tag_exists_parses_git_output(monkeypatch):
     assert tag_release.tag_exists("v9.9.9") is False
 
 
-def test_tag_release_run_invokes_shell_command(monkeypatch, capsys):
+def test_tag_release_run_invokes_command_without_shell(monkeypatch, capsys):
     calls = []
     monkeypatch.setattr(
         tag_release.subprocess,
@@ -144,7 +125,7 @@ def test_tag_release_run_invokes_shell_command(monkeypatch, capsys):
         lambda command, shell, check: calls.append((command, shell, check)),
     )
     tag_release.run("git status")
-    assert calls == [("git status", True, True)]
+    assert calls == [(["git", "status"], False, True)]
     assert "$ git status" in capsys.readouterr().out
 
 
@@ -173,18 +154,25 @@ def test_tag_release_main_blocks_existing_tag(monkeypatch, tmp_path, capsys):
     assert "already exists" in capsys.readouterr().out
 
 
-def test_bump_version_declares_its_toml_runtime_dependency():
-    import tomllib
-
-    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+def test_bump_version_uses_stdlib_tomllib_and_preserves_comments(tmp_path):
     script = Path("bump_version.py").read_text(encoding="utf-8")
-    dependencies = pyproject["project"].get("dependencies", [])
-    if "import toml" in script and not any(
-        dep.lower().startswith("toml") for dep in dependencies
-    ):
-        pytest.xfail(
-            "bump_version.py imports toml but pyproject.toml does not declare toml"
-        )
+    assert "import tomllib" in script
+    assert "import toml\n" not in script
+
+    pyproject = tmp_path / "pyproject.toml"
+    cargo = tmp_path / "Cargo.toml"
+    version_file = tmp_path / "__version__.py"
+    pyproject.write_text(
+        '# keep this comment\n[project]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    cargo.write_text(
+        '# cargo comment\n[package]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    bump_version.write_new_version(pyproject, cargo, version_file, "0.2.0")
+    assert "# keep this comment" in pyproject.read_text(encoding="utf-8")
+    assert "# cargo comment" in cargo.read_text(encoding="utf-8")
 
 
 def test_tag_release_main_success_path(monkeypatch, tmp_path, capsys):

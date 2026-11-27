@@ -1,2 +1,4 @@
 # src/ascii_art/__init__.py
-# Exposes the package
+from .__version__ import __version__
+
+__all__ = ["__version__"]

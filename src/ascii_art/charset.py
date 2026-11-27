@@ -55,7 +55,7 @@ def set_persistent_charset(charset_name):
 
     try:
         data = {"charset": charset_name}
-        with open(CONFIG_FILE, "w") as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f)
         print(f"✅ Default charset set to: {charset_name}")
     except Exception as e:
@@ -67,7 +67,7 @@ def load_persistent_charset_name():
     if not CONFIG_FILE.exists():
         return None
     try:
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("charset")
     except Exception:
